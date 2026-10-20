@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "utils.h"
 
 const char delimiters[]={
@@ -54,4 +56,27 @@ bool is_keyword(std::string &str){
     }
 
     return false;
+}
+
+void emit_error(error err,std::string &msg){
+    switch (err){
+        case error::LEXICAL_ERROR:{
+            std::cout << "Lexical Error: ";
+            break;
+        }
+        case error::SYNTAX_ERROR:{
+            std::cout << "Syntax Error: ";
+            break;
+        }
+        case error::SEMANTIC_ERROR:{
+            std::cout << "Semantic Error: ";
+            break;
+        }
+        case error::CODE_GENERATION_ERROR:{
+            std::cout << "Code Generation Error: ";
+            break;
+        }
+    }
+    std::cout << '\'' << msg << '\'' << std::endl;
+    std::exit(1);
 }

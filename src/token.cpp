@@ -12,7 +12,9 @@ std::string token::to_string(){
     
 }
 
-token_list::token_list(){}
+token_list::token_list(){
+    i=0;
+}
 
 token token_list::peek(){
     return tokens.at(i);
