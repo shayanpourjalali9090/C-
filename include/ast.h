@@ -21,6 +21,8 @@ class ast_node{
 
     ast_node(ast_node_type type, std::string value);
 
+    ast_node(ast_node_type type);
+
     ast_node_type type;
     ast_node *left,*right;
     std::string value;

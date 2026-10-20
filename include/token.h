@@ -39,6 +39,8 @@ class token_list{
 
     token advance();
 
+    bool end();
+
     bool expect(std::string value);
 
     void push(token t);
