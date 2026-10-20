@@ -20,7 +20,9 @@ class token{
 
     token();
 
-    token(token_type type, std::string value);
+    token(std::string str);
+
+    token(token_type type,std::string value);
 
     std::string to_string();
 

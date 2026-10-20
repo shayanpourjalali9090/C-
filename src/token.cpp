@@ -1,6 +1,12 @@
 #include "token.h"
+#include "utils.h"
 
 token::token(){}
+
+token::token(std::string str){
+    type=is_numeric(str)?token_type::NUMBER:is_keyword(str)?token_type::KEYWORD:token_type::IDENTIFIER;
+    value=str;
+}
 
 token::token(token_type type, std::string value){
     this->type=type;
