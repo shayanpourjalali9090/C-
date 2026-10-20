@@ -17,7 +17,7 @@ const std::string operators[]={
 
 const std::string keywords[]={
     "let","while","if","elif","else","func",
-    "return","break","continue","sizeof",
+    "return","break","continue","true","false",
     "MOV","ADD","SUB","IDIV","IMUL","JMP","JG",
     "JGE","JL","JLE","JNE","JE","CALL","RET",
     "CMP", "SHR", "SHL", "INC","DEC","SYSCALL",
@@ -29,6 +29,20 @@ const std::string registers[]={
     "RBP","RSP","R8","R9","R10","R11",
     "R12","R13","R14","R15"
 };
+
+bool is_register(std::string &str){
+    for (std::string reg:registers){
+        if (str==reg)return true;
+    }
+    return false;
+}
+
+bool is_delimiter(char c){
+    for (char delimiter:delimiters){
+        if (delimiter==c)return true;
+    }
+    return false;
+}
 
 inline bool is_numeric(char c){
     return c>='0' && c<='9';
@@ -58,7 +72,7 @@ bool is_keyword(std::string &str){
     return false;
 }
 
-void emit_error(error err,std::string &msg){
+void emit_error(error err,const char *msg){
     switch (err){
         case error::LEXICAL_ERROR:{
             std::cout << "Lexical Error: ";
@@ -76,7 +90,8 @@ void emit_error(error err,std::string &msg){
             std::cout << "Code Generation Error: ";
             break;
         }
+        default:break;
     }
-    std::cout << '\'' << msg << '\'' << std::endl;
+    std::cerr << '\'' << msg << '\'' << std::endl;
     std::exit(1);
 }

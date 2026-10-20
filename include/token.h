@@ -10,8 +10,12 @@ enum class token_type{
     OPERATOR,
     DELIMITER,
     NUMBER,
+    REGISTER,
+    END_OF_FILE,
 
 };
+
+std::string token_type_to_string(token_type type);
 
 class token{
     public:
@@ -23,6 +27,8 @@ class token{
     token(std::string str);
 
     token(token_type type,std::string value);
+
+    token(token_type type);
 
     std::string to_string();
 
@@ -39,6 +45,10 @@ class token_list{
 
     token peek();
 
+    token at(int i);
+
+    token lookahead();
+
     token advance();
 
     bool end();
@@ -46,6 +56,10 @@ class token_list{
     bool expect(std::string value);
 
     void push(token t);
+
+    std::string to_string();
+
+    int size();
 
     private:
 
