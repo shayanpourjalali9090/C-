@@ -1,6 +1,5 @@
 func main(){
-    let x='\312';
-    if (x!=324 || x>>=312){
-        
-    }
+    let x='\312'; //this is a comment
+    let str="Hello, world!";
+    return 0;
 }
