@@ -30,7 +30,7 @@ class ast_node{
 
     ast_node_type type;
     ast_node *left,*right,*condition,*true_node,*false_node;
-    std::string value;
+    std::string value,identifier;
 
     private:
 
