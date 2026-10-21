@@ -51,6 +51,8 @@ class token_list{
 
     bool match(std::string value);
 
+    bool match(token_type type);
+
     token at(int i);
 
     token lookahead();
