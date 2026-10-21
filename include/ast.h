@@ -7,6 +7,8 @@ enum class ast_node_type{
     DECLARATION,
     EXPRESSION,
     UNARY,
+    IDENTIFIER,
+    NUMBER,
     LOOP,
     FUNCTION,
     IF,
