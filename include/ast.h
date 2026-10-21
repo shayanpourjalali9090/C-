@@ -8,9 +8,10 @@ enum class ast_node_type{
     EXPRESSION,
     UNARY,
     IDENTIFIER,
+    FUNCTION_CALL,
     NUMBER,
     LOOP,
-    FUNCTION,
+    FUNCTION_DEFINITION,
     IF,
     ASM,
 
@@ -30,6 +31,7 @@ class ast_node{
 
     ast_node_type type;
     ast_node *left,*right,*condition,*true_node,*false_node;
+    ast params,children;
     std::string value,identifier;
 
     private:
