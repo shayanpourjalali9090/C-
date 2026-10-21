@@ -53,6 +53,8 @@ class ast{
 
     int size();
 
+    bool empty();
+
     void push(ast_node *node);
 
     std::string to_string();

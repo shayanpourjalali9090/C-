@@ -38,6 +38,10 @@ void ast::clear(){
     tree.clear();
 }
 
+bool ast::empty(){
+    return tree.empty();
+}
+
 int ast::size(){
     return (int)tree.size();
 }
