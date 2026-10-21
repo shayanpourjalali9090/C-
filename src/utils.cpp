@@ -72,7 +72,7 @@ bool is_keyword(std::string &str){
     return false;
 }
 
-void emit_error(error err,const char *msg){
+void emit_error(error err,const char *msg, int line_number){
     switch (err){
         case error::LEXICAL_ERROR:{
             std::cout << "Lexical Error: ";
@@ -93,5 +93,6 @@ void emit_error(error err,const char *msg){
         default:break;
     }
     std::cerr << '\'' << msg << '\'' << std::endl;
+    std::cerr << "At line " << line_number << std::endl;
     std::exit(1);
 }

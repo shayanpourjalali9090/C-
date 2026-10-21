@@ -21,4 +21,4 @@ bool is_delimiter(char c);
 
 bool is_keyword(std::string &str);
 
-void emit_error(error err,const char *msg);
+void emit_error(error err,const char *msg,int line_number);
