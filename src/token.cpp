@@ -8,13 +8,25 @@ token::token(token_type type){
 }
 
 token::token(std::string str){
-    type=is_numeric(str)?token_type::NUMBER:is_register(str)?token_type::REGISTER:is_keyword(str)?token_type::KEYWORD:token_type::IDENTIFIER;
+    type=is_numeric(str)?token_type::NUMBER
+    :is_register(str)?token_type::REGISTER
+    :is_keyword(str)?token_type::KEYWORD
+    :token_type::IDENTIFIER;
+    
     value=str;
 }
 
 token::token(token_type type, std::string value){
     this->type=type;
     this->value=value;
+}
+
+token token_list::operator++(){
+    return advance();
+}
+
+token token_list::operator++(int){
+    return advance();
 }
 
 std::string token_type_to_string(token_type type){
@@ -51,19 +63,37 @@ token_list::token_list(){
 }
 
 token token_list::peek(){
-    return tokens.at(i);
+    return at(i);
 }
 
 token token_list::advance(){
-    return tokens.at(i++);
+    return at(i++);
 }
 
-bool token_list::expect(std::string value){
-    return advance().value==value;
+bool token_list::match(std::string value){
+    return peek().value==value;
+}
+
+void token_list::expect(std::string value){
+    token t=advance().value;
+
+    if (t.type==token_type::END_OF_FILE){
+        std::string errmsg="Expected '"+value+"'";
+
+        emit_error(error::SYNTAX_ERROR,errmsg.c_str(),t.line_number);
+        
+    }
+    else if(t.value!=value){
+        std::string errmsg="Expected '"+value+"' but got '"+t.value+"' instead";
+
+        emit_error(error::SYNTAX_ERROR,errmsg.c_str(),t.line_number);
+
+    }
+
 }
 
 bool token_list::end(){
-    return i==tokens.size();
+    return i>=tokens.size();
 }
 
 void token_list::push(token t){

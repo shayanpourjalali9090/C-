@@ -19,8 +19,10 @@ std::string token_type_to_string(token_type type);
 
 class token{
     public:
+
     token_type type;
     std::string value;
+    int line_number;
 
     token();
 
@@ -38,12 +40,16 @@ class token{
 
 class token_list{
     public:
+
     int i;
+    
     std::vector<token> tokens;
 
     token_list();
 
     token peek();
+
+    bool match(std::string value);
 
     token at(int i);
 
@@ -53,7 +59,11 @@ class token_list{
 
     bool end();
 
-    bool expect(std::string value);
+    void expect(std::string value);
+
+    token operator++();
+
+    token operator++(int);
 
     void push(token t);
 
