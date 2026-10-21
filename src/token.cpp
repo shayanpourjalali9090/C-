@@ -74,6 +74,10 @@ bool token_list::match(std::string value){
     return peek().value==value;
 }
 
+bool token_list::match(token_type type){
+    return peek().type==type;
+}
+
 void token_list::expect(std::string value){
     token t=advance().value;
 
