@@ -32,8 +32,9 @@ class ast_node{
 
     ast_node_type type;
     ast_node *left,*right,*condition,*true_node,*false_node;
-    ast params,children;
+    ast args,children;
     std::string value,identifier;
+    std::vector<std::string> params;
 
     private:
 
