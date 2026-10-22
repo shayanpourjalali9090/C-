@@ -68,7 +68,7 @@ token token_list::peek(){
     if (t.type==token_type::END_OF_FILE){
         emit_error(error::SYNTAX_ERROR,"Unexpected EOF",t.line_number);
     }
-    return at(i);
+    return t;
 }
 
 token token_list::advance(){
@@ -85,22 +85,28 @@ bool token_list::match(token_type type){
     return peek().type==type;
 }
 
-void token_list::expect(std::string value){
-    token t=advance().value;
+token token_list::expect(std::string value){
+    token t=advance();
 
-    if (t.type==token_type::END_OF_FILE){
-        std::string errmsg="Expected '"+value+"'";
-
-        emit_error(error::SYNTAX_ERROR,errmsg.c_str(),t.line_number);
-        
-    }
-    else if(t.value!=value){
+    if(t.value!=value){
         std::string errmsg="Expected '"+value+"' but got '"+t.value+"' instead";
 
-        emit_error(error::SYNTAX_ERROR,errmsg.c_str(),t.line_number);
+        emit_error(error::SYNTAX_ERROR,errmsg,t.line_number);
 
     }
 
+    return t;
+
+}
+
+token token_list::expect(token_type type){
+    token t=advance();
+
+    if (t.type!=type){
+        emit_error(error::SYNTAX_ERROR,"Expected type "+token_type_to_string(type)+" but got "+token_type_to_string(t.type)+" instead",t.line_number);
+    }
+
+    return t;
 }
 
 bool token_list::end(){
@@ -116,7 +122,7 @@ int token_list::size(){
 }
 
 token token_list::at(int index){
-    return index>=tokens.size()?token(token_type::END_OF_FILE):tokens.at(index);
+    return end()?token(token_type::END_OF_FILE):tokens.at(index);
 }
 
 token token_list::lookahead(){

@@ -61,7 +61,9 @@ class token_list{
 
     bool end();
 
-    void expect(std::string value);
+    token expect(std::string value);
+
+    token expect(token_type type);
 
     token operator++();
 
