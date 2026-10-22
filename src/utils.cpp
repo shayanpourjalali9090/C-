@@ -93,6 +93,6 @@ void emit_error(error err,const char *msg, int line_number){
         default:break;
     }
     std::cerr << '\'' << msg << '\'' << std::endl;
-    std::cerr << "At line " << line_number << std::endl;
+    std::cerr << "Near line " << line_number << std::endl;
     std::exit(1);
 }
