@@ -22,7 +22,8 @@ token::token(token_type type, std::string value){
 }
 
 token token_list::operator++(){
-    return advance();
+    advance();
+    return peek();
 }
 
 token token_list::operator++(int){
@@ -71,7 +72,9 @@ token token_list::peek(){
 }
 
 token token_list::advance(){
-    return at(i++);
+    token t=peek();
+    i++;
+    return t;
 }
 
 bool token_list::match(std::string value){
