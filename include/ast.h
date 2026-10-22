@@ -13,6 +13,7 @@ enum class ast_node_type{
     BLOCK,
     LOOP,
     FUNCTION_DEFINITION,
+    RETURN,
     IF,
     ASM,
 
