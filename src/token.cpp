@@ -63,6 +63,10 @@ token_list::token_list(){
 }
 
 token token_list::peek(){
+    token t=at(i);
+    if (t.type==token_type::END_OF_FILE){
+        emit_error(error::SYNTAX_ERROR,"Unexpected EOF",t.line_number);
+    }
     return at(i);
 }
 
