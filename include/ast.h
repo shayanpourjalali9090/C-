@@ -10,6 +10,7 @@ enum class ast_node_type{
     IDENTIFIER,
     FUNCTION_CALL,
     NUMBER,
+    BLOCK,
     LOOP,
     FUNCTION_DEFINITION,
     IF,
