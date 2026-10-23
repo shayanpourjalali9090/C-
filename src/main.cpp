@@ -551,6 +551,8 @@ token_list lex(std::string &file){
 
 }
 
+ast_node* parse_statement(token_list &list);
+
 ast_node* parse_primary(token_list &list){
 
     if (list.match(token_type::NUMBER)){
@@ -571,20 +573,18 @@ ast_node* parse_primary(token_list &list){
             
         }
         else if (list.match("(")){
-            list++; //advance past '('
             int tmp_line_number=list.peek().line_number;
+            list++; //advance past '('
             node->type=ast_node_type::FUNCTION_CALL;
             
             while (!list.end() && !list.match(")")){
                 ast_node* param=parse_expression(list);
-                node->params.push(param);
+                node->args.push(param);
 
                 if (list.match(")"))break;
                 list.expect(",");
 
             }
-
-            // list.peek(); //check for EOF
 
             list.expect(")");
 
@@ -603,9 +603,16 @@ ast_node* parse_primary(token_list &list){
 
         return node;
     }
-    else{
-        emit_error(error::SYNTAX_ERROR,("Unexpected token '"+list.peek().value+"'").c_str(),list.peek().line_number);
+    else if (list.match("true") || list.match("false")){
+        ast_node* node=new ast_node(ast_node_type::NUMBER);
+        node->value=list.match("true")?"1":"0";
+        list++;
+        return node;
     }
+    return nullptr;
+    // else{
+    //     emit_error(error::SYNTAX_ERROR,("Unexpected token '"+list.peek().value+"'").c_str(),list.peek().line_number);
+    // }
 
 }
 
@@ -826,29 +833,164 @@ ast_node* parse_equals(token_list &list){
 }
 
 ast_node* parse_expression(token_list &list){
-    return parse_equals(list);
+    ast_node* node=parse_equals(list);
+    return node;
 }
 
 ast_node* parse_declaration(token_list &list){
     ast_node* node=new ast_node(ast_node_type::DECLARATION);
 
     list++; //advance past '='
-    token identifier_token=list++; //advance past identifier
-
-    if (identifier_token.type!=token_type::IDENTIFIER){
-        emit_error(error::SYNTAX_ERROR,"Expected identifier after let",identifier_token.line_number);
-    }
+    token identifier_token=list.expect(token_type::IDENTIFIER);
 
     node->value=identifier_token.value;
     
     list.expect("=");
 
     node->right=parse_expression(list);
-    
+
     list.expect(";");
 
     return node;
 
+}
+
+ast_node* parse_block(token_list &list){
+    ast_node* node=new ast_node(ast_node_type::BLOCK);
+    list++;
+    
+    while (!list.end() && !list.match("}")){
+        ast_node* statement=parse_statement(list);
+        node->children.push(statement);
+    }
+
+    list.expect("}");
+
+    return node;
+
+}
+
+ast_node* parse_function(token_list &list){
+    ast_node* node=new ast_node(ast_node_type::FUNCTION_DEFINITION);
+    list++;
+
+    token identifier_token=list.expect(token_type::IDENTIFIER);
+
+    list.expect("(");
+
+    while (!list.end() && !list.match(")")){
+        token param=list.expect(token_type::IDENTIFIER);
+
+        node->params.push_back(param.value);
+
+        if (list.match(")"))break;
+
+        list.expect(",");
+
+    }
+
+    list.expect(")");
+
+    list.expect("{");
+
+    while (!list.end() && !list.match("}")){
+        ast_node* statement=parse_statement(list);
+
+        node->children.push(statement);
+
+    }
+
+    list.expect("}");
+
+    return node;
+    
+}
+
+ast_node* parse_return(token_list &list){
+    ast_node* node=new ast_node(ast_node_type::RETURN);
+
+    list.expect("return");
+
+    node->right=parse_expression(list);
+
+    list.expect(";");
+
+    return node;
+
+}
+
+ast_node* parse_break(token_list &list){
+    ast_node* node=new ast_node(ast_node_type::BREAK);
+    list.expect("break");
+    list.expect(";");
+
+    return node;
+}
+
+ast_node* parse_continue(token_list &list){
+    ast_node* node=new ast_node(ast_node_type::CONTINUE);
+    list.expect("continue");
+    list.expect(";");
+
+    return node;
+}
+
+ast_node* parse_while(token_list &list){
+    ast_node* node=new ast_node(ast_node_type::LOOP);
+    list.expect("while");
+
+    list.expect("(");
+
+    node->condition=parse_expression(list);
+
+    list.expect(")");
+
+    node->right=parse_statement(list);
+
+    return node;
+
+}
+
+ast_node* parse_if(token_list &list){
+    ast_node* node=new ast_node(ast_node_type::IF);
+    list.expect("if");
+
+    list.expect("(");
+
+    node->condition=parse_expression(list);
+
+    list.expect(")");
+
+    node->right=parse_statement(list);
+
+    while(list.match("elif")){
+        ast_node* elif_node=new ast_node(ast_node_type::ELIF);
+        list.expect("elif");
+
+        list.expect("(");
+
+        elif_node->condition=parse_expression(list);
+
+        list.expect(")");
+
+        elif_node->right=parse_statement(list);
+
+        node->elifs.push(elif_node);
+        
+    }
+
+    if (list.match("else")){
+        ast_node* else_node=new ast_node(ast_node_type::ELSE);
+        list.expect("else");
+
+        else_node->right=parse_statement(list);
+
+        node->else_node=else_node;
+
+    }
+
+    return node;
+        
 }
 
 ast_node* parse_statement(token_list &list){
@@ -857,10 +999,33 @@ ast_node* parse_statement(token_list &list){
         if (list.match("let")){
             return parse_declaration(list);
         }
+        if (list.match("func")){
+            return parse_function(list);
+        }
+        if (list.match("return")){
+            return parse_return(list);
+        }
+        if (list.match("while")){
+            return parse_while(list);
+        }
+        if (list.match("break")){
+            return parse_break(list);
+        }
+        if (list.match("continue")){
+            return parse_continue(list);
+        }
+        if (list.match("if")){
+            return parse_if(list);
+        }
 
     }
+    else if (list.match("{")){
+        return parse_block(list);
+    }
     else{
-
+        ast_node* node=parse_expression(list);
+        list.expect(";");
+        return node;
     }
 
 }
@@ -901,7 +1066,7 @@ int main(int argc, char** argv){
 
     token_list tokens=lex(file);
 
-    std::cout << tokens.to_string() << std::endl;
+    ast tree=parse(tokens);
 
     return 0;
 }
