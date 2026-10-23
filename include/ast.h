@@ -14,6 +14,8 @@ enum class ast_node_type{
     LOOP,
     FUNCTION_DEFINITION,
     RETURN,
+    BREAK,
+    CONTINUE,
     IF,
     ASM,
 
