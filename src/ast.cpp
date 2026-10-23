@@ -1,19 +1,13 @@
 #include "ast.h"
 
-ast_node::ast_node(){
-    left=right=nullptr;
-}
+ast_node::ast_node()
+    : left(nullptr), right(nullptr){}
 
-ast_node::ast_node(ast_node_type type, std::string value){
-    this->type=type;
-    this->value=value;
-    left=right=nullptr;
-}
+ast_node::ast_node(ast_node_type type, std::string value)
+    : type(type), value(value), left(nullptr), right(nullptr){}
 
-ast_node::ast_node(ast_node_type type){
-    this->type=type;
-    left=right=nullptr;
-}
+ast_node::ast_node(ast_node_type type)
+    : type(type), left(nullptr), right(nullptr){}
 
 ast_node::~ast_node(){
     delete left;
