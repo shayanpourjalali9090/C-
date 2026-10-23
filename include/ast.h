@@ -17,6 +17,8 @@ enum class ast_node_type{
     BREAK,
     CONTINUE,
     IF,
+    ELIF,
+    ELSE,
     ASM,
 
 };
