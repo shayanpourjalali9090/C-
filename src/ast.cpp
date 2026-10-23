@@ -1,13 +1,18 @@
 #include "ast.h"
 
 ast_node::ast_node()
-    : left(nullptr), right(nullptr){}
+    : left(nullptr), right(nullptr), else_node(nullptr), 
+    true_node(nullptr), false_node(nullptr), condition(nullptr){}
 
 ast_node::ast_node(ast_node_type type, std::string value)
-    : type(type), value(value), left(nullptr), right(nullptr){}
+    : type(type), value(value), left(nullptr), right(nullptr), 
+    else_node(nullptr), true_node(nullptr), false_node(nullptr), 
+    condition(nullptr){}
 
 ast_node::ast_node(ast_node_type type)
-    : type(type), left(nullptr), right(nullptr){}
+    : type(type), left(nullptr), right(nullptr), 
+    else_node(nullptr), true_node(nullptr), false_node(nullptr), 
+    condition(nullptr){}
 
 ast_node::~ast_node(){
     delete left;
