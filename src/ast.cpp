@@ -20,6 +20,7 @@ ast_node::~ast_node(){
     delete condition;
     delete true_node;
     delete false_node;
+    delete else_node;
     
 }
 
