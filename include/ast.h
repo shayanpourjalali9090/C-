@@ -1,5 +1,7 @@
 #pragma once
 
+#include "symbol.h"
+
 #include <string>
 #include <vector>
 
@@ -41,6 +43,7 @@ class ast_node{
     ast args,children,elifs;
     std::string value,identifier;
     std::vector<std::string> params;
+    symbol_table* table;
 
     private:
 
