@@ -11,6 +11,7 @@ enum class ast_node_type{
     EXPRESSION,
     UNARY,
     IDENTIFIER,
+    ARRAY_ACCESS,
     FUNCTION_CALL,
     NUMBER,
     STRING,
@@ -27,28 +28,8 @@ enum class ast_node_type{
 
 };
 
-
-class ast_node{
-    public:
-
-    ast_node();
-
-    ~ast_node();
-
-    ast_node(ast_node_type type, std::string value);
-
-    ast_node(ast_node_type type);
-
-    ast_node_type type;
-    ast_node *left,*right,*condition,*true_node,*false_node,*else_node;
-    ast args,children,elifs;
-    std::string value,identifier;
-    std::vector<token> params;
-    symbol_table* table;
-
-    private:
-
-};
+std::string node_type_to_string(ast_node_type type);
+class ast_node;
 
 class ast{
     public:
@@ -69,7 +50,31 @@ class ast{
 
     void push(ast_node *node);
 
-    std::string to_string();
+    void print(int depth);
+
+    private:
+
+};
+
+class ast_node{
+    public:
+
+    ast_node();
+
+    ~ast_node();
+
+    ast_node(ast_node_type type, std::string value);
+
+    ast_node(ast_node_type type);
+
+    void print(int depth);
+
+    ast_node_type type;
+    ast_node *left,*right,*condition,*true_node,*false_node,*else_node,*element_size_reference;
+    ast args,children,elifs,indexes;
+    std::string value,identifier;
+    std::vector<token> params;
+    symbol_table* table;
 
     private:
 

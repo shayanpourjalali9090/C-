@@ -54,7 +54,61 @@ void ast::push(ast_node* node){
     tree.push_back(node);
 }
 
-std::string ast::to_string(){
+std::string node_type_to_string(ast_node_type type){
+    std::string node_type_strs[]={
+        "DECLARATION",
+        "EXPRESSION",
+        "UNARY",
+        "IDENTIFIER",
+        "ARRAY_ACCESS",
+        "FUNCTION_CALL",
+        "NUMBER",
+        "STRING",
+        "BLOCK",
+        "LOOP",
+        "FUNCTION_DEFINITION",
+        "RETURN",
+        "BREAK",
+        "CONTINUE",
+        "IF",
+        "ELIF",
+        "ELSE",
+        "ASM",
+    };
 
-    return "";
+    return node_type_strs[(int)type];
+}
+
+void ast_node::print(int depth){
+    std::string tabs;
+
+    for (int i=0;i<depth;i++)tabs+=i%2==0?'|':'\t';
+
+    printf("%sType: '%s'\n%sValue: '%s'\n",tabs.c_str(),node_type_to_string(type).c_str(),tabs.c_str(),value.c_str());
+
+    if (!identifier.empty()){
+        printf("%sIdentifier: '%s'\n",tabs.c_str(),identifier.c_str());
+    }
+
+    if (left!=nullptr){
+        printf("%s\tLeft:\n",tabs.c_str());
+        left->print(depth+2);
+    }
+    if (right!=nullptr){
+        printf("%s\tRight:\n",tabs.c_str());
+        right->print(depth+2);
+    }
+
+    if (children.size()){
+        children.print(depth+2);
+    }
+    
+}
+
+void ast::print(int depth){
+    for (int i=0;i<tree.size();i++){
+        ast_node* node=tree.at(i);
+        node->print(depth);
+    }
+
 }
