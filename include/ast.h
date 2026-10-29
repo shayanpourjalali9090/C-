@@ -8,6 +8,8 @@
 
 enum class ast_node_type{
     DECLARATION,
+    ARRAY_DECLARATION,
+    ARRAY,
     EXPRESSION,
     UNARY,
     IDENTIFIER,
@@ -71,7 +73,7 @@ class ast_node{
 
     ast_node_type type;
     ast_node *left,*right,*condition,*true_node,*false_node,*else_node,*element_size_reference;
-    ast args,children,elifs,indexes;
+    ast args,children,elifs,indexes,elements;
     std::string value,identifier;
     std::vector<token> params;
     symbol_table* table;

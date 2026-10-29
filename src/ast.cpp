@@ -57,6 +57,8 @@ void ast::push(ast_node* node){
 std::string node_type_to_string(ast_node_type type){
     std::string node_type_strs[]={
         "DECLARATION",
+        "ARRAY_DECLARATION",
+        "ARRAY",
         "EXPRESSION",
         "UNARY",
         "IDENTIFIER",
@@ -98,11 +100,18 @@ void ast_node::print(int depth){
         printf("%s\tRight:\n",tabs.c_str());
         right->print(depth+2);
     }
-
+    if (element_size_reference!=nullptr){
+        printf("%s\tElement Size Reference:\n",tabs.c_str());
+        element_size_reference->print(depth+2);
+    }
     if (children.size()){
+        printf("%s\tChildren:\n",tabs.c_str());
         children.print(depth+2);
     }
-    
+    if (indexes.size()){
+        printf("%s\tIndexes:\n",tabs.c_str());
+        indexes.print(depth+2);
+    }
 }
 
 void ast::print(int depth){
