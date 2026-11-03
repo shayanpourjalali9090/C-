@@ -2,17 +2,18 @@
 
 ast_node::ast_node()
     : left(nullptr), right(nullptr), else_node(nullptr), 
-    true_node(nullptr), false_node(nullptr), condition(nullptr){}
+    true_node(nullptr), false_node(nullptr), condition(nullptr),
+    table(nullptr){}
 
 ast_node::ast_node(ast_node_type type, std::string value)
     : type(type), value(value), left(nullptr), right(nullptr), 
     else_node(nullptr), true_node(nullptr), false_node(nullptr), 
-    condition(nullptr){}
+    condition(nullptr), table(nullptr){}
 
 ast_node::ast_node(ast_node_type type)
     : type(type), left(nullptr), right(nullptr), 
     else_node(nullptr), true_node(nullptr), false_node(nullptr), 
-    condition(nullptr){}
+    condition(nullptr), table(nullptr){}
 
 ast_node::~ast_node(){
     delete left;
@@ -93,24 +94,28 @@ void ast_node::print(int depth){
     }
 
     if (left!=nullptr){
-        printf("%s\tLeft:\n",tabs.c_str());
+        printf("%s--------Left:\n",tabs.c_str());
         left->print(depth+2);
     }
     if (right!=nullptr){
-        printf("%s\tRight:\n",tabs.c_str());
+        printf("%s--------Right:\n",tabs.c_str());
         right->print(depth+2);
     }
     if (element_size_reference!=nullptr){
-        printf("%s\tElement Size Reference:\n",tabs.c_str());
+        printf("%s--------Element Size Reference:\n",tabs.c_str());
         element_size_reference->print(depth+2);
     }
     if (children.size()){
-        printf("%s\tChildren:\n",tabs.c_str());
+        printf("%s--------Children:\n",tabs.c_str());
         children.print(depth+2);
     }
     if (indexes.size()){
-        printf("%s\tIndexes:\n",tabs.c_str());
+        printf("%s--------Indexes:\n",tabs.c_str());
         indexes.print(depth+2);
+    }
+    if (elements.size()){
+        printf("%s--------Elements:\n",tabs.c_str());
+        elements.print(depth+2);
     }
 }
 

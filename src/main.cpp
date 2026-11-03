@@ -36,7 +36,7 @@ token_list lex(std::string &file){
     token_list list;
     std::string buf;
 
-    int line_number=0;
+    int line_number=1;
 
     for (uint32_t i=0;i<file.length();++i){
         char c=file[i];
@@ -62,6 +62,13 @@ token_list lex(std::string &file){
                     continue;
                 }
                 case '\t':{
+                    continue;
+                }
+                case ',':{
+                    token t2(token_type::DELIMITER);
+                    t2.value=",";
+                    t2.line_number=line_number;
+                    list.push(t2);
                     continue;
                 }
                 case '"':{
@@ -552,6 +559,9 @@ token_list lex(std::string &file){
 }
 
 ast_node* parse_statement(token_list &list);
+ast_node* parse_expression(token_list &list);
+ast_node* parse_logical_or(token_list &list);
+ast_node* parse_shift(token_list &list);
 
 ast_node* parse_primary(token_list &list){
 
@@ -565,14 +575,10 @@ ast_node* parse_primary(token_list &list){
     else if (list.match(token_type::IDENTIFIER)){
         ast_node* node=new ast_node(ast_node_type::IDENTIFIER);
 
-        node->identifier=list++.value; //advance past identifier
+        node->identifier=list.expect(token_type::IDENTIFIER).value;
 
-        if (list.match("++") || list.match("--")){
-            node->type=ast_node_type::EXPRESSION;
-            node->value=list++.value; //advance past postfix
-            
-        }
-        else if (list.match("(")){
+        
+        if (list.match("(")){
             int tmp_line_number=list.peek().line_number;
             list++; //advance past '('
             node->type=ast_node_type::FUNCTION_CALL;
@@ -588,6 +594,32 @@ ast_node* parse_primary(token_list &list){
 
             list.expect(")");
 
+        }
+
+        if (list.match("$")){
+            ast_node* node2=new ast_node(ast_node_type::ARRAY_ACCESS);
+
+            list.expect("$");
+            node2->element_size_reference=parse_expression(list);
+
+            do{
+                list.expect("[");
+                ast_node* index=parse_expression(list);
+                node2->indexes.push(index);
+                list.expect("]");
+
+            }while(list.match("["));
+
+            node2->left=node;
+            node=node2;
+
+        }
+
+        if (list.match("++") || list.match("--")){
+            ast_node* node2=new ast_node(ast_node_type::EXPRESSION);
+            node2->value=list++.value;
+            node2->left=node;
+            node=node2;
         }
 
         return node;
@@ -609,10 +641,12 @@ ast_node* parse_primary(token_list &list){
         list++;
         return node;
     }
+    else if (list.match(token_type::STRING)){
+        ast_node* node=new ast_node(ast_node_type::STRING);
+        node->value=list.expect(token_type::STRING).value;
+        return node;
+    }
     return nullptr;
-    // else{
-    //     emit_error(error::SYNTAX_ERROR,("Unexpected token '"+list.peek().value+"'").c_str(),list.peek().line_number);
-    // }
 
 }
 
@@ -837,14 +871,75 @@ ast_node* parse_expression(token_list &list){
     return node;
 }
 
+ast_node* parse_array(token_list &list){
+    ast_node* node=new ast_node(ast_node_type::ARRAY);
+    list.expect("{");
+
+    do{
+        ast_node* element;
+
+        if (list.match("{")){
+            element=parse_array(list);
+        }
+        else{
+            element=parse_expression(list);
+        }
+        node->elements.push(element);
+
+        if (list.match("}")){
+            break;
+        }
+        list.expect(",");
+        
+
+    }while(!list.match("}"));
+
+    list.expect("}");
+
+    return node;
+
+}
+
 ast_node* parse_declaration(token_list &list){
     ast_node* node=new ast_node(ast_node_type::DECLARATION);
 
-    list++; //advance past '='
-    token identifier_token=list.expect(token_type::IDENTIFIER);
+    list++; //advance past let
+    node->identifier=list.expect(token_type::IDENTIFIER).value;
 
-    node->value=identifier_token.value;
-    
+    if (list.match("$")){
+        list.expect("$");
+
+        node->type=ast_node_type::ARRAY_DECLARATION;
+        node->element_size_reference=parse_expression(list);
+
+        do{
+            list.expect("[");
+            ast_node* index=parse_expression(list);
+            node->indexes.push(index);
+            list.expect("]");
+
+        }while (list.match("["));
+
+        if (list.match(";")){
+            list.expect(";");
+            return node;
+        }
+        
+        list.expect("=");
+
+        node->right=parse_array(list);
+
+        list.expect(";");
+
+        return node;
+
+    }
+
+    if (list.match(";")){
+        list.expect(";");
+        return node;
+    }
+
     list.expect("=");
 
     node->right=parse_expression(list);
@@ -874,14 +969,14 @@ ast_node* parse_function(token_list &list){
     ast_node* node=new ast_node(ast_node_type::FUNCTION_DEFINITION);
     list++;
 
-    token identifier_token=list.expect(token_type::IDENTIFIER);
+    node->identifier=list.expect(token_type::IDENTIFIER).value;
 
     list.expect("(");
 
     while (!list.end() && !list.match(")")){
         token param=list.expect(token_type::IDENTIFIER);
 
-        node->params.push_back(param.value);
+        node->params.push_back(param);
 
         if (list.match(")"))break;
 
@@ -890,6 +985,11 @@ ast_node* parse_function(token_list &list){
     }
 
     list.expect(")");
+
+    if (list.match(";")){
+        list.expect(";");
+        return node;
+    }
 
     list.expect("{");
 
@@ -911,7 +1011,9 @@ ast_node* parse_return(token_list &list){
 
     list.expect("return");
 
-    node->right=parse_expression(list);
+    if (!list.match(";")){
+        node->right=parse_expression(list);
+    }
 
     list.expect(";");
 
@@ -963,7 +1065,7 @@ ast_node* parse_if(token_list &list){
 
     node->right=parse_statement(list);
 
-    while(list.match("elif")){
+    while (list.match("elif")){
         ast_node* elif_node=new ast_node(ast_node_type::ELIF);
         list.expect("elif");
 
@@ -1043,9 +1145,62 @@ ast parse(token_list &list){
     
 }
 
+void build_symbol_table(ast &tree, symbol_table* table){
+    for (int i=0;i<tree.size();i++){
+        ast_node* node=tree.get(i);
+        
+        if (node->type==ast_node_type::DECLARATION || node->type==ast_node_type::ARRAY_DECLARATION){
+            symbol* s=new symbol(node->identifier);
+
+            if (table->type!=symbol_table_type::GLOBAL){
+                s->type=symbol_type::LOCAL;
+                s->offset=table->cur_offset;
+                
+                table->cur_offset-=8;
+            }
+            else{
+                s->type=symbol_type::GLOBAL;
+            }
+            
+            table->push(s);
+            
+        }
+        else if (node->type==ast_node_type::FUNCTION_DEFINITION){
+            symbol* s=table->lookup(node->identifier);
+
+            if (s==nullptr){
+                s=new symbol(node->identifier);
+                s->type=symbol_type::FUNCTION;
+                table->push(s);
+
+            }
+
+            if (!node->children.empty()){
+                node->table=new symbol_table(symbol_table_type::FUNCTION,table,-8);
+                build_symbol_table(node->children,node->table);
+                node->table->push_params(node->params);
+            }
+
+
+        }
+        else if (node->type==ast_node_type::BLOCK){
+            if (table->type==symbol_table_type::GLOBAL){
+                emit_error(error::SEMANTIC_ERROR,"Unexpected block statement");
+
+            }
+            node->table=new symbol_table(symbol_table_type::BLOCK,table,table->cur_offset);
+            build_symbol_table(node->children,node->table);
+
+        }
+
+        
+    }
+
+}
+
 int main(int argc, char** argv){
     std::cout << "MUST HAVE NASM INSTALLED!" << std::endl << std::endl;
-
+    
     for (int i=1;i<argc;i++){
         if ((std::string)argv[i]=="--help"){
             print_help();
@@ -1065,8 +1220,16 @@ int main(int argc, char** argv){
     std::string file=get_file_as_string(input_file);
 
     token_list tokens=lex(file);
-
+    std::cout << tokens.to_string()<<'\n';
     ast tree=parse(tokens);
+    
+    tree.print(0);
+
+    symbol_table* global_table=new symbol_table(symbol_table_type::GLOBAL);
+    
+    build_symbol_table(tree,global_table);
+
+    
 
     return 0;
 }
