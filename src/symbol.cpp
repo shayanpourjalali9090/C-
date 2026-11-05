@@ -19,7 +19,7 @@ symbol::symbol(std::string name, int offset)
 
 std::string symbol::get_address(){
     if (type==symbol_type::GLOBAL || type==symbol_type::FUNCTION){
-        return name;
+        return get_nasm_label();
     }
 
     std::string address="RBP";
@@ -48,17 +48,30 @@ symbol* symbol_table::lookup(std::string &identifier){
     }
     if (parent!=nullptr)
         return parent->lookup(identifier);
-    
+
     return nullptr;
+}
+
+void symbol_table::inc_locals_count(){
+    if (type==symbol_table_type::GLOBAL)return;
+
+    if (type==symbol_table_type::FUNCTION){
+        locals_count++;
+
+    }
+    else{
+        parent->inc_locals_count();
+    }
+    
 }
 
 void symbol_table::push(symbol* s){
     table.push_back(s);
-    
+    inc_locals_count();
 }
 
 inline std::string symbol::get_nasm_label(){
-    return 'v'+name;
+    return '?'+name;
 }
 
 void symbol_table::push_params(std::vector<token> &params){

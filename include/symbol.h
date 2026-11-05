@@ -45,13 +45,15 @@ class symbol_table{
     symbol_table_type type;
     std::vector<symbol*> table;
     symbol_table *parent;
-    int cur_offset;
+    int cur_offset,locals_count=0;
 
     symbol_table(symbol_table_type type);
 
     symbol_table(symbol_table_type type, symbol_table* parent, int offset);
 
     symbol* lookup(std::string &identifier);
+
+    void inc_locals_count();
 
     void push(symbol* s);
 

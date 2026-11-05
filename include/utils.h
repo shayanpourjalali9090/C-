@@ -24,3 +24,7 @@ bool is_keyword(std::string &str);
 void emit_error(error err, std::string msg, int line_number);
 
 void emit_error(error err, std::string msg);
+
+std::string sformat(std::string str, ...);
+
+bool is_binary_operator(std::string &str);

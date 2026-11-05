@@ -1,5 +1,7 @@
 #include <iostream>
 
+#include <cstdarg>
+
 #include "utils.h"
 
 const char delimiters[]={
@@ -29,6 +31,23 @@ const std::string registers[]={
     "RBP","RSP","R8","R9","R10","R11",
     "R12","R13","R14","R15"
 };
+
+const std::string binary_operators[]={
+    "+","-","*","/","%","^","&","|",
+    "==","!=",">>","<<",">",">=","<","<=",
+
+};
+
+bool is_binary_operator(std::string str){
+    if (str.empty())return false;
+    
+    for (std::string op:binary_operators){
+        if (op==str)return true;
+    }
+    
+    return false;
+
+}
 
 bool is_register(std::string &str){
     for (std::string reg:registers){
@@ -101,5 +120,42 @@ void emit_error(error err, std::string msg, int line_number){
 
 void emit_error(error err, std::string msg){
     emit_error(err,msg,-1);
+
+}
+
+std::string sformat(std::string str, ...){
+    std::string ret;
+
+    va_list args;
+    va_start(args, str);
+
+    for (int i=0;i<str.size();i++){
+        if (str[i]=='%'){
+            i++;
+            switch (str[i]){
+                case '%':{
+                    ret+='%';
+                    break;
+                }
+                case 'd':{
+                    ret+=std::to_string(va_arg(args,int));
+                    break;
+                }
+                case 's':{
+                    ret+=va_arg(args,const char*);
+                    break;
+                }
+                default: break;
+            }
+        }
+        else{
+            ret+=str[i];
+        }
+
+    }
+
+    va_end(args);
+
+    return ret;
 
 }

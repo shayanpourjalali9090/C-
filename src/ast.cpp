@@ -3,17 +3,17 @@
 ast_node::ast_node()
     : left(nullptr), right(nullptr), else_node(nullptr), 
     true_node(nullptr), false_node(nullptr), condition(nullptr),
-    table(nullptr){}
+    table(nullptr),element_size_reference(nullptr){}
 
 ast_node::ast_node(ast_node_type type, std::string value)
     : type(type), value(value), left(nullptr), right(nullptr), 
     else_node(nullptr), true_node(nullptr), false_node(nullptr), 
-    condition(nullptr), table(nullptr){}
+    condition(nullptr), table(nullptr), element_size_reference(nullptr){}
 
 ast_node::ast_node(ast_node_type type)
     : type(type), left(nullptr), right(nullptr), 
     else_node(nullptr), true_node(nullptr), false_node(nullptr), 
-    condition(nullptr), table(nullptr){}
+    condition(nullptr), table(nullptr),element_size_reference(nullptr){}
 
 ast_node::~ast_node(){
     delete left;
