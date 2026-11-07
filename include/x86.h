@@ -99,6 +99,8 @@ class asm_function{
 
     void push_local_label(std::string l);
 
+    std::string to_string();
+
     private:
 };
 

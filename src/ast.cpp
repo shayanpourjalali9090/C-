@@ -117,11 +117,16 @@ void ast_node::print(int depth){
         printf("%s--------Elements:\n",tabs.c_str());
         elements.print(depth+2);
     }
+    if (args.size()){
+        printf("%s--------Args:\n",tabs.c_str());
+        args.print(depth+2);
+    }
 }
 
 void ast::print(int depth){
     for (int i=0;i<tree.size();i++){
         ast_node* node=tree.at(i);
+        if (node)
         node->print(depth);
     }
 

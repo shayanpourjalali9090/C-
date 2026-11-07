@@ -15,7 +15,7 @@
 std::string input_file,output_file;
 
 void print_help(){
-    printf("C- Compiler\n\nUsage: c- [OPTION]... [INPUT_FILE] [OUTPUT_FILE]\n\nOptions:\n\t--help\n\t    Print help information.\n\n");
+    printf("C- Compiler\n\nUsage: c- [INPUT_FILE] [OUTPUT_FILE] [OPTION]...\n\nOptions:\n\t--help\n\t    Print help information.\n\t-a\n\t    Output asm file only\n\n");
 
 }
 
@@ -646,6 +646,7 @@ ast_node* parse_primary(token_list &list){
         node->value=list.expect(token_type::STRING).value;
         return node;
     }
+
     return nullptr;
 
 }
@@ -915,7 +916,7 @@ ast_node* parse_declaration(token_list &list){
         node->element_size_reference=parse_expression(list);
 
         if (node->element_size_reference->type!=ast_node_type::NUMBER){
-            emit_error(error::SYNTAX_ERROR,"Element size reference must be constant",lineno);
+            emit_error(error::SYNTAX_ERROR,"Element size reference must be constant in declaration",lineno);
         }
 
         do{
@@ -925,7 +926,7 @@ ast_node* parse_declaration(token_list &list){
 
             ast_node* index=parse_expression(list);
             if (index->type!=ast_node_type::NUMBER){
-                emit_error(error::SYNTAX_ERROR,"Array size(s) must be constant", lineno2);
+                emit_error(error::SYNTAX_ERROR,"Array size(s) must be constant in declaration", lineno2);
             }
             node->indexes.push(index);
             list.expect("]");
@@ -968,7 +969,7 @@ ast_node* parse_block(token_list &list){
     
     while (!list.end() && !list.match("}")){
         ast_node* statement=parse_statement(list);
-        node->children.push(statement);
+        if (statement!=nullptr)node->children.push(statement);
     }
 
     list.expect("}");
@@ -980,6 +981,8 @@ ast_node* parse_block(token_list &list){
 ast_node* parse_function(token_list &list){
     ast_node* node=new ast_node(ast_node_type::FUNCTION_DEFINITION);
     list++;
+
+    node->function_declaration=false;
 
     node->identifier=list.expect(token_type::IDENTIFIER).value;
 
@@ -1000,6 +1003,7 @@ ast_node* parse_function(token_list &list){
 
     if (list.match(";")){
         list.expect(";");
+        node->function_declaration=true;
         return node;
     }
 
@@ -1008,7 +1012,7 @@ ast_node* parse_function(token_list &list){
     while (!list.end() && !list.match("}")){
         ast_node* statement=parse_statement(list);
 
-        node->children.push(statement);
+        if (statement!=nullptr)node->children.push(statement);
 
     }
 
@@ -1149,8 +1153,7 @@ ast parse(token_list &list){
 
     while (!list.end()){
         ast_node* node=parse_statement(list);
-        tree.push(node);
-
+        if (node!=nullptr)tree.push(node);
     }
     
     return tree;
@@ -1187,10 +1190,11 @@ void build_symbol_table(ast &tree, symbol_table* table){
 
             }
 
-            if (!node->children.empty()){
+            if (!node->function_declaration){
                 node->table=new symbol_table(symbol_table_type::FUNCTION,table,-8);
                 build_symbol_table(node->children,node->table);
                 node->table->push_params(node->params);
+
             }
 
 
@@ -1204,19 +1208,45 @@ void build_symbol_table(ast &tree, symbol_table* table){
             build_symbol_table(node->children,node->table);
 
         }
+        else if (node->type==ast_node_type::LOOP){
+            if (node->right && node->right->type==ast_node_type::BLOCK){
+                node->right->table=new symbol_table(symbol_table_type::BLOCK,table,table->cur_offset);
+                build_symbol_table(node->right->children,node->right->table);
 
+            }
+
+        }
+        else if (node->type==ast_node_type::IF){
+            if (node->right && node->right->type==ast_node_type::BLOCK){
+                node->right->table=new symbol_table(symbol_table_type::BLOCK,table,table->cur_offset);
+                build_symbol_table(node->right->children,node->right->table);
+
+            }
+            for (int i=0;i<node->elifs.size();i++){
+                ast_node* elif=node->elifs.get(i);
+
+                if (elif->right && elif->right->type==ast_node_type::BLOCK){
+                    elif->right->table=new symbol_table(symbol_table_type::BLOCK,table,table->cur_offset);
+                    build_symbol_table(elif->right->children,elif->right->table);
+                }
+            }
+            if (node->else_node && node->else_node->right && node->else_node->right->type==ast_node_type::BLOCK){
+                node->else_node->right->table=new symbol_table(symbol_table_type::BLOCK,table,table->cur_offset);
+                build_symbol_table(node->else_node->right->children, node->else_node->right->table);
+            }
+        }
         
     }
 
 }
 
-void generate_expression(asm_program &program, asm_function* function, symbol_table* table, ast_node* node){
+void generate_expression(asm_program &program, asm_function* function, symbol_table* table, ast_node* node, bool get_address){
     if (node==nullptr)return;
     
     if (is_binary_operator(node->value) && node->type==ast_node_type::EXPRESSION){
-        generate_expression(program,function,table,node->left);
+        generate_expression(program,function,table,node->left, false);
         function->push(instruction("PUSH","RAX"));
-        generate_expression(program,function,table,node->right);
+        generate_expression(program,function,table,node->right, false);
         function->push(instruction("MOV","RBX","RAX"));
         function->push(instruction("POP","RAX"));
 
@@ -1277,17 +1307,90 @@ void generate_expression(asm_program &program, asm_function* function, symbol_ta
             function->push(instruction("SETGE","AL"));
             function->push(instruction("MOVZX","RAX","AL"));
         }
+        else if (node->value=="^"){
+            function->push(instruction("XOR","RAX","RBX"));
+        }
+        else if (node->value=="&"){
+            function->push(instruction("AND","RAX","RBX"));
+        }
+        else if (node->value=="|"){
+            function->push(instruction("OR","RAX","RBX"));
+        }
 
+
+    }
+    else if (node->type==ast_node_type::UNARY){
+
+        if (node->value=="*"){
+            generate_expression(program,function,table,node->right,false);
+
+            if (!get_address){
+                function->push(instruction("MOV","RAX","[RAX]"));
+            }
+
+        }
+        else if (node->value=="!"){
+            generate_expression(program,function,table,node->right,false);
+            function->push(instruction("CMP","RAX","0"));
+            function->push(instruction("SETE","AL"));
+            function->push(instruction("MOVZX","RAX","AL"));
+        }
+        else if (node->value=="~"){
+            generate_expression(program,function,table,node->right,false);
+            function->push(instruction("NOT","RAX"));
+        }
+        else if (node->value=="-"){
+            generate_expression(program,function,table,node->right,false);
+            function->push(instruction("NEG","RAX"));
+        }
+        else if (node->value=="@"){
+            generate_expression(program,function,table,node->right,true);
+
+        }
+        else if(node->value=="++" || node->value=="--"){
+            std::string opc=node->value=="++"?"ADD":"SUB";
+
+            generate_expression(program,function,table,node->right,true);
+
+            std::string _2=function->create_local_label();
+            std::string _4=function->create_local_label();
+            std::string _8=function->create_local_label();
+            std::string donel=function->create_local_label();
+
+            function->push(instruction("MOV","RBX","1"));
+
+            function->push(instruction("CMP","R8","2"));
+            function->push(instruction("JGE",_2));
+            function->push(instruction(opc,"[RAX]","BL"));
+            function->push(instruction("JMP",donel));
+            function->push_local_label(_2);
+            function->push(instruction("CMP","R8","4"));
+            function->push(instruction("JGE",_4));
+            function->push(instruction(opc,"[RAX]","BX"));
+            function->push(instruction("JMP",donel));
+            function->push_local_label(_4);
+            function->push(instruction("CMP","R8","8"));
+            function->push(instruction("JGE",_8));
+            function->push(instruction(opc,"[RAX]","EBX"));
+            function->push(instruction("JMP",donel));
+            function->push_local_label(_8);
+            function->push(instruction(opc,"[RAX]","RBX"));
+            function->push_local_label(donel);
+            function->push(instruction("MOV","R8","8"));
+
+            generate_expression(program,function,table,node->right,false);
+
+        }
 
     }
     else if (node->value=="&&"){
         std::string donel=function->create_local_label();
 
         function->push(instruction("MOV","RBX","0"));
-        generate_expression(program,function,table,node->left);
+        generate_expression(program,function,table,node->left,false);
         function->push(instruction("CMP","RAX","0"));
         function->push(instruction("JE",donel));
-        generate_expression(program,function,table,node->right);
+        generate_expression(program,function,table,node->right,false);
         function->push(instruction("CMP","RAX","0"));
         function->push(instruction("JE",donel));
         function->push(instruction("MOV","RBX","1"));
@@ -1299,15 +1402,253 @@ void generate_expression(asm_program &program, asm_function* function, symbol_ta
         std::string donel=function->create_local_label();
 
         function->push(instruction("MOV","RBX","1"));
-        generate_expression(program,function,table,node->left);
+        generate_expression(program,function,table,node->left,false);
         function->push(instruction("CMP","RAX","0"));
         function->push(instruction("JNE",donel));
-        generate_expression(program,function,table,node->right);
+        generate_expression(program,function,table,node->right,false);
         function->push(instruction("CMP","RAX","0"));
         function->push(instruction("JNE",donel));
         function->push(instruction("MOV","RBX","0"));
         function->push_local_label(donel);
         function->push(instruction("MOV","RAX","RBX"));
+
+    }
+    else if (node->value=="++" || node->value=="--"){
+        std::string opc=node->value=="++"?"ADD":"SUB";
+
+        generate_expression(program,function,table,node->left,false);
+
+        function->push(instruction("PUSH","RAX"));
+
+        generate_expression(program,function,table,node->left,true);
+
+        std::string _2=function->create_local_label();
+        std::string _4=function->create_local_label();
+        std::string _8=function->create_local_label();
+        std::string donel=function->create_local_label();
+
+        function->push(instruction("MOV","RBX","1"));
+
+        function->push(instruction("CMP","R8","2"));
+        function->push(instruction("JGE",_2));
+        function->push(instruction(opc,"[RAX]","BL"));
+        function->push(instruction("JMP",donel));
+        function->push_local_label(_2);
+        function->push(instruction("CMP","R8","4"));
+        function->push(instruction("JGE",_4));
+        function->push(instruction(opc,"[RAX]","BX"));
+        function->push(instruction("JMP",donel));
+        function->push_local_label(_4);
+        function->push(instruction("CMP","R8","8"));
+        function->push(instruction("JGE",_8));
+        function->push(instruction(opc,"[RAX]","EBX"));
+        function->push(instruction("JMP",donel));
+        function->push_local_label(_8);
+        function->push(instruction(opc,"[RAX]","RBX"));
+        function->push_local_label(donel);
+        function->push(instruction("MOV","R8","8"));
+
+        function->push(instruction("POP","RAX"));
+
+    }
+    else if (node->type==ast_node_type::ARRAY_ACCESS){
+        generate_expression(program,function,table,node->left,false);
+        function->push(instruction("PUSH","RAX"));
+
+        generate_expression(program,function,table,node->element_size_reference,false);
+
+        function->push(instruction("MOV","R8","RAX"));
+
+        function->push(instruction("POP","RAX")); //RAX contains address
+
+        for (int i=0;i<node->indexes.size();i++){
+            function->push(instruction("PUSH","RAX"));
+            function->push(instruction("PUSH","R8"));
+
+            generate_expression(program,function,table,node->indexes.get(i),false);
+
+            function->push(instruction("POP","R8"));
+
+            function->push(instruction("MOV","RBX","RAX"));
+            function->push(instruction("POP","RAX"));
+
+            if (i<node->indexes.size()-1){
+                function->push(instruction("MOV","RAX","[RAX+RBX*8]"));
+
+            }
+            else{
+                function->push(instruction("LEA","RAX","[RAX+RBX*R8]"));
+
+            }
+
+        }
+
+        if (!get_address){
+            std::string _2=function->create_local_label();
+            std::string _4=function->create_local_label();
+            std::string _8=function->create_local_label();
+            std::string donel=function->create_local_label();
+
+            function->push(instruction("CMP","R8","2"));
+            function->push(instruction("JGE",_2));
+            function->push(instruction("MOV","AL","[RAX]"));
+            function->push(instruction("MOVZX","RAX","AL"));
+            function->push(instruction("JMP",donel));
+            function->push_local_label(_2);
+            function->push(instruction("CMP","R8","4"));
+            function->push(instruction("JGE",_4));
+            function->push(instruction("MOV","AX","[RAX]"));
+            function->push(instruction("MOVZX","RAX","AX"));
+            function->push(instruction("JMP",donel));
+            function->push_local_label(_4);
+            function->push(instruction("CMP","R8","8"));
+            function->push(instruction("JGE",_8));
+            function->push(instruction("MOV","EAX","[RAX]"));
+            function->push(instruction("MOVZX","RAX","EAX"));
+            function->push(instruction("JMP",donel));
+            function->push_local_label(_8);
+            function->push(instruction("MOV","RAX","[RAX]"));
+            function->push_local_label(donel);
+            function->push(instruction("MOV","R8","8"));
+
+        }
+            
+    }
+    else if (node->value=="=" || node->value=="+=" || node->value=="-=" || node->value=="*=" || 
+        node->value=="^=" || node->value=="&=" || node->value=="|=" || node->value==">>=" || 
+        node->value=="<<="){
+            std::string opc;
+            if (node->value=="=")opc="MOV";
+            else if (node->value=="+=")opc="ADD";
+            else if (node->value=="-=")opc="SUB";
+            else if (node->value=="*=")opc="IMUL";
+            else if (node->value=="^=")opc="XOR";
+            else if (node->value=="|=")opc="OR";
+            else if (node->value=="&=")opc="AND";
+            else if (node->value==">>=")opc="SHR";
+            else if (node->value=="<<=")opc="SHL";
+
+            generate_expression(program,function,table,node->left,true);
+
+            function->push(instruction("PUSH","RAX"));
+
+            generate_expression(program,function,table,node->right,false);
+
+            function->push(instruction("MOV","RBX","RAX"));
+            function->push(instruction("POP","RAX"));
+
+            std::string _2=function->create_local_label();
+            std::string _4=function->create_local_label();
+            std::string _8=function->create_local_label();
+            std::string donel=function->create_local_label();
+
+            function->push(instruction("CMP","R8","2"));
+            function->push(instruction("JGE",_2));
+            function->push(instruction(opc,"[RAX]","BL"));
+            function->push(instruction("JMP",donel));
+            function->push_local_label(_2);
+            function->push(instruction("CMP","R8","4"));
+            function->push(instruction("JGE",_4));
+            function->push(instruction(opc,"[RAX]","BX"));
+            function->push(instruction("JMP",donel));
+            function->push_local_label(_4);
+            function->push(instruction("CMP","R8","8"));
+            function->push(instruction("JGE",_8));
+            function->push(instruction(opc,"[RAX]","EBX"));
+            function->push(instruction("JMP",donel));
+            function->push_local_label(_8);
+            function->push(instruction(opc,"[RAX]","RBX"));
+            function->push_local_label(donel);
+            function->push(instruction("MOV","R8","8"));
+
+            function->push(instruction("MOV","RAX","RBX"));
+
+        }
+    else if (node->value=="/=" || node->value=="%="){
+        generate_expression(program,function,table,node->left,false);
+
+        function->push(instruction("PUSH","RAX"));
+
+        generate_expression(program,function,table,node->right,false);
+
+        function->push(instruction("MOV","RBX","RAX"));
+
+        function->push(instruction("POP","RAX"));
+
+        function->push(instruction("CQO"));
+
+        function->push(instruction("IDIV","RBX"));
+
+        function->push(instruction("PUSH","RBX"));
+
+        if (node->value=="%="){
+            function->push(instruction("MOV","RAX","RDX"));
+        }
+
+        function->push(instruction("MOV","RBX","RAX"));
+
+        generate_expression(program,function,table,node->left,true);
+
+        std::string _2=function->create_local_label();
+        std::string _4=function->create_local_label();
+        std::string _8=function->create_local_label();
+        std::string donel=function->create_local_label();
+
+        function->push(instruction("CMP","R8","2"));
+        function->push(instruction("JGE",_2));
+        function->push(instruction("MOV","[RAX]","BL"));
+        function->push(instruction("JMP",donel));
+        function->push_local_label(_2);
+        function->push(instruction("CMP","R8","4"));
+        function->push(instruction("JGE",_4));
+        function->push(instruction("MOV","[RAX]","BX"));
+        function->push(instruction("JMP",donel));
+        function->push_local_label(_4);
+        function->push(instruction("CMP","R8","8"));
+        function->push(instruction("JGE",_8));
+        function->push(instruction("MOV","[RAX]","EBX"));
+        function->push(instruction("JMP",donel));
+        function->push_local_label(_8);
+        function->push(instruction("MOV","[RAX]","RBX"));
+        function->push_local_label(donel);
+        function->push(instruction("MOV","R8","8"));
+
+        function->push(instruction("POP","RAX"));
+
+    }
+    else if (node->type==ast_node_type::FUNCTION_CALL){
+        symbol* s=table->lookup(node->identifier);
+
+        for (int i=node->args.size()-1;i>=0;i--){
+            ast_node* arg=node->args.get(i);
+
+            generate_expression(program, function, table, arg, false);
+
+            function->push(instruction("PUSH","RAX"));
+        }
+
+        function->push(instruction("LEA","RAX",sformat("[%s]",s->get_address().c_str())));
+
+        function->push(instruction("CALL","RAX"));
+
+        if (node->args.size()){
+            function->push(instruction("ADD","RBP",std::to_string(node->args.size()*8)));
+        }
+
+    }
+    else if (node->value=="?"){
+        std::string elif=function->create_local_label();
+        std::string donel=function->create_local_label();
+
+        generate_expression(program,function,table,node->condition,false);
+
+        function->push(instruction("CMP","RAX","0"));
+        function->push(instruction("JE",elif));
+        generate_expression(program,function,table,node->true_node,false);
+        function->push(instruction("JMP",donel));
+        function->push_local_label(elif);
+        generate_expression(program,function,table,node->false_node,false);
+        function->push_local_label(donel);
 
     }
     else if (node->type==ast_node_type::NUMBER){
@@ -1317,109 +1658,114 @@ void generate_expression(asm_program &program, asm_function* function, symbol_ta
         std::string str=program.push_string(node->value);
         function->push(instruction("MOV","RAX",str));
     }
+    else if (node->type==ast_node_type::IDENTIFIER){
+        symbol* s=table->lookup(node->identifier);
+        if (s==nullptr){
+            emit_error(error::CODE_GENERATION_ERROR,sformat("Unkown symbol '%s'",node->identifier.c_str()));
+        }
+
+        std::string address=s->get_address();
+
+        function->push(instruction("LEA","RAX",sformat("[%s]",address.c_str())));
+
+        if (!get_address){
+            function->push(instruction("MOV","RAX","[RAX]"));
+        }
+
+    }
 
 }
 
-typedef struct arraynode_t{
-    std::string array;
-    arraynode_t* next;
+void generate_array(asm_program &program, asm_function* function, ast &indexes, int index, int esr){
+    int cur_size=std::stoi(indexes.get(index)->value);
 
-    arraynode_t(std::string array){
-        this->array=array;
-        next=nullptr;
-    };
+    bool last=index==indexes.size()-1;
 
-    ~arraynode_t(){
-        delete next;
-    }
-
-}arraynode_t;
-
-void generate_array(asm_program &program, asm_function* function, symbol_table* table, ast &elements, int esr, arraynode_t* array){
-    char* register_name;
-
-    if (array->next==nullptr){
-        if (esr<2){
-            register_name="AL";
-        }
-        else if (esr<4){
-            register_name="AX";
-        }
-        else if (esr<8){
-            register_name="EAX";
-        }
-        else register_name="RAX";
-
+    data_size dsize;
+    if (last){
+        if (esr<2)dsize=data_size::BYTE;
+        else if (esr<4)dsize=data_size::WORD;
+        else if (esr<8)dsize=data_size::DWORD;
+        else dsize=data_size::QWORD;
     }
     else{
-        register_name="RAX";
+        dsize=data_size::QWORD;
     }
+
+    std::string array=program.push_array(dsize,cur_size);
+
+    for (int i=0;i<cur_size && !last;i++){
+        generate_array(program,function,indexes,index+1,esr);
+        function->push(instruction("MOV",sformat("[%s+%d*8]",array.c_str(),i),"RAX"));
+
+    }
+
+    function->push(instruction("MOV","RAX",array));
+
+}
+
+void generate_fill_array(asm_program &program, asm_function* function, symbol_table* table, ast &elements, int esr){
+    std::string reg;
+
+    if (esr<2)reg="BL";
+    else if (esr<4)reg="BX";
+    else if (esr<8)reg="EBX";
+    else reg="RBX";
 
     for (int i=0;i<elements.size();i++){
         ast_node* node=elements.get(i);
 
         if (node->type==ast_node_type::ARRAY){
-            generate_array(program,function,table,node->elements,esr,array->next);
+            function->push(instruction("PUSH","RAX"));
+            function->push(instruction("MOV","RAX",sformat("[RAX+%d*8]",i)));
+
+            generate_fill_array(program,function,table,node->elements,esr);
+
+            function->push(instruction("POP","RAX"));
+
         }
         else{
-            generate_expression(program,function,table,node);
-        }
-        
-        function->push(instruction("MOV",sformat("[%s+%d*%d]",array->array,i,array->next==nullptr?esr:8),register_name));
-    }
+            function->push(instruction("PUSH","RAX"));
 
-    function->push(instruction("MOV","RAX",array->array));
+            generate_expression(program,function,table,node,false);
+
+            function->push(instruction("MOV","RBX","RAX"));
+
+            function->push(instruction("POP","RAX"));
+
+            function->push(instruction("MOV",sformat("[RAX+%d*%d]",i,esr),reg));
+
+        }
+
+    }
 
 }
 
 void generate_declaration(asm_program &program, asm_function* function, symbol_table* table, ast_node* node){
     symbol* s=table->lookup(node->identifier);
-
+    
     if (s->type==symbol_type::GLOBAL){
         program.push_global(s->name);
     }
 
     if (node->type==ast_node_type::ARRAY_DECLARATION){
-        arraynode_t *top=nullptr, *cur;
-
         int esr=std::stoi(node->element_size_reference->value);
 
-        data_size dsize;
-        
-        if (esr<2)dsize=data_size::BYTE;
-        else if (esr<4)dsize=data_size::WORD;
-        else if (esr<8)dsize=data_size::DWORD;
-        else dsize=data_size::QWORD;
+        generate_array(program,function,node->indexes,0,esr);
 
-        for (int i=0;i<node->indexes.size();i++){
-            int size=std::stoi(node->indexes.get(i)->value);
-            std::string array;
+        if (node->right){
+            function->push(instruction("PUSH","RAX"));
 
-            if (i<node->indexes.size()-1){
-                array=program.push_array(data_size::QWORD,size);
-            }
-            else{
-                array=program.push_array(dsize,size);
-            }
-
-            if (top==nullptr){
-                top=new arraynode_t(array);
-                cur=top;
-            }
-            else{
-                cur->next=new arraynode_t(array);
-                cur=cur->next;
-            }
+            generate_fill_array(program,function,table,node->right->elements,esr);
+            
+            function->push(instruction("POP","RAX"));
 
         }
 
-        generate_array(program,function,table,node->elements,esr,top);
 
-        delete top;
-        
     }
     else{
-        generate_expression(program,function,table,node->right);
+        generate_expression(program,function,table,node->right,false);
 
     }
     function->push(instruction("MOV",sformat("[%s]",s->get_address().c_str()),"RAX"));
@@ -1429,22 +1775,135 @@ void generate_declaration(asm_program &program, asm_function* function, symbol_t
 void generate_statement(asm_program &program, asm_function* function, symbol_table* table, ast_node* node);
 
 void generate_block(asm_program &program, asm_function* function, ast_node* node){
+    
     for (int i=0;i<node->children.size();i++){
         ast_node* statement=node->children.get(i);
         generate_statement(program,function,node->table,statement);
-
     }
 
 }
 
+void generate_epilogue(asm_function* function){
+    function->push(instruction("MOV","RSP","RBP"));
+    function->push(instruction("POP","RBP"));
+    function->push(instruction("RET"));
+
+}
+
+void generate_return(asm_program &program, asm_function* function, symbol_table* table, ast_node* node){
+    generate_expression(program,function,table,node->right,false);
+    generate_epilogue(function);
+
+}
+
+std::vector<std::string> continue_labels;
+std::vector<std::string> break_labels;
+
+void generate_loop(asm_program &program, asm_function* function, symbol_table* table, ast_node* node){
+    std::string start=function->create_local_label();
+    std::string end=function->create_local_label();
+
+    continue_labels.push_back(start);
+    break_labels.push_back(end);
+
+    function->push_local_label(start);
+
+    generate_expression(program,function,table,node->condition,false);
+    
+    function->push(instruction("CMP","RAX","0"));
+    function->push(instruction("JE",end));
+
+    generate_statement(program,function,table,node->right);
+
+    function->push(instruction("JMP",start));
+
+    function->push_local_label(end);
+    
+    continue_labels.pop_back();
+    break_labels.pop_back();
+
+}
+
+void generate_break(asm_function* function){
+    if (break_labels.empty())emit_error(error::CODE_GENERATION_ERROR,"Break outside loop");
+
+    function->push(instruction("JMP",break_labels.at(break_labels.size()-1)));
+    
+}
+
+void generate_continue(asm_function* function){
+    if (continue_labels.empty())emit_error(error::CODE_GENERATION_ERROR,"Continue outside loop");
+
+    function->push(instruction("JMP",continue_labels.at(continue_labels.size()-1)));
+
+}
+
+void generate_if(asm_program &program, asm_function* function, symbol_table* table, ast_node* node){
+    std::string endl=function->create_local_label();
+    std::string notif=function->create_local_label();
+    
+    generate_expression(program,function,table,node->condition,false);
+
+    function->push(instruction("CMP","RAX","0"));
+    function->push(instruction("JE",notif));
+
+    generate_statement(program,function,table,node->right);
+    
+    function->push(instruction("JMP",endl));
+
+    function->push_local_label(notif);
+    
+    for (int i=0;i<node->elifs.size();i++){
+        ast_node* elif=node->elifs.get(i);
+
+        std::string out=function->create_local_label();
+
+        generate_expression(program,function,table,elif->condition,false);
+
+        function->push(instruction("CMP","RAX","0"));
+        function->push(instruction("JE",out));
+
+        generate_statement(program,function,table,elif->right);
+
+        function->push(instruction("JMP",endl));
+
+        function->push_local_label(out);
+
+    }
+
+    generate_statement(program,function,table,node->else_node);
+
+    function->push_local_label(endl);
+
+}
+
 void generate_statement(asm_program &program, asm_function* function, symbol_table* table, ast_node* node){
-    if (node->type==ast_node_type::EXPRESSION){
-        generate_expression(program,function,table,node);
+    if (node==nullptr)return;
+
+    if (node->type==ast_node_type::DECLARATION || node->type==ast_node_type::ARRAY_DECLARATION){
+        generate_declaration(program,function,table,node);
     }
     else if (node->type==ast_node_type::BLOCK){
         generate_block(program,function,node);
     }
-    
+    else if (node->type==ast_node_type::RETURN){
+        generate_return(program,function,table,node);
+    }
+    else if (node->type==ast_node_type::LOOP){
+        generate_loop(program,function,table,node);
+    }
+    else if (node->type==ast_node_type::CONTINUE){
+        generate_continue(function);
+    }
+    else if (node->type==ast_node_type::BREAK){
+        generate_break(function);
+    }
+    else if (node->type==ast_node_type::IF){
+        generate_if(program,function,table,node);
+    }
+    else{
+        generate_expression(program,function,table,node,false);
+    }
 
 }
 
@@ -1453,18 +1912,29 @@ void generate_function(asm_program &program, ast_node* node){
 
     symbol_table* table=node->table;
 
+    function->push(instruction("PUSH","RBP"));
+    function->push(instruction("MOV","RBP","RSP"));
+    if (table->locals_count)
+        function->push(instruction("SUB","RSP",std::to_string(table->locals_count*8)));
+
     for (int i=0;i<node->children.size();i++){
         ast_node* statement=node->children.get(i);
 
-        generate_statement(program, function, table, statement);
+        generate_statement(program,function,table,statement);
 
     }
+
+    generate_epilogue(function);
 
     program.push_function(function);
 
 }
 
 void generate_code(asm_program &program, symbol_table* table, ast &tree){
+    program._start.push(instruction("MOV","R8","8"));
+
+    
+
     for (int i=0;i<tree.size();i++){
         ast_node* node=tree.get(i);
 
@@ -1473,22 +1943,41 @@ void generate_code(asm_program &program, symbol_table* table, ast &tree){
 
         }
         else if (node->type==ast_node_type::FUNCTION_DEFINITION){
-            if (!node->children.empty()){
+            if (!node->function_declaration){
                 generate_function(program, node);
             }
         }
 
     }
 
+    program._start.push(instruction("MOV","RAX","[RSP]"));
+    program._start.push(instruction("LEA","RBX","[RSP+8]"));
+
+    program._start.push(instruction("PUSH","RBX"));
+    program._start.push(instruction("PUSH","RAX"));
+    program._start.push(instruction("CALL","?main"));
+
+    program._start.push(instruction("ADD","RSP","16"));
+    program._start.push(instruction("MOV","RDI","RAX"));
+    program._start.push(instruction("MOV","RAX","60"));
+    program._start.push(instruction("SYSCALL"));
+
 }
 
 int main(int argc, char** argv){
     std::cout << "MUST HAVE NASM INSTALLED!" << std::endl << std::endl;
-    
+
+    bool asm_only=false;
+
     for (int i=1;i<argc;i++){
         if ((std::string)argv[i]=="--help"){
             print_help();
             return 0;
+        }
+        if ((std::string)argv[i]=="-a"){
+            asm_only=true;
+            continue;
+
         }
 
     }
@@ -1504,10 +1993,8 @@ int main(int argc, char** argv){
     std::string file=get_file_as_string(input_file);
 
     token_list tokens=lex(file);
-    std::cout << tokens.to_string() << '\n';
+
     ast tree=parse(tokens);
-    
-    tree.print(0);
 
     symbol_table* global_table=new symbol_table(symbol_table_type::GLOBAL);
     
@@ -1517,5 +2004,27 @@ int main(int argc, char** argv){
     
     generate_code(program,global_table,tree);
 
+    std::string nasm_string=program.to_string();
+
+    std::string nasmstr=output_file+".asm";
+
+    std::ofstream nasm_file(nasmstr);
+
+    nasm_file << nasm_string;
+
+    nasm_file.close();
+
+    std::string objstr=output_file+".o";
+
+    std::string cmd1="nasm -f elf64 "+nasmstr+" -o "+objstr;
+    std::string cmd2="ld "+objstr+" -o "+output_file;
+    std::string cmd3="rm "+nasmstr+" "+objstr;
+
+    if (!asm_only){
+        std::system(cmd1.c_str());
+        std::system(cmd2.c_str());
+        std::system(cmd3.c_str());
+
+    }
     return 0;
 }

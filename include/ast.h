@@ -77,6 +77,7 @@ class ast_node{
     std::string value,identifier;
     std::vector<token> params;
     symbol_table* table;
+    bool function_declaration;
 
     private:
 

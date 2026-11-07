@@ -182,7 +182,48 @@ void asm_function::push_local_label(std::string l){
         if (local_labels[i]==l){
             push(instruction(l+": "));
             local_labels.erase(local_labels.begin()+i);
-            break;
+            return;
         }
     }
+}
+
+std::string asm_function::to_string(){
+    std::string ret=title+":\n";
+
+    for (int i=0;i<instructions.size();i++){
+        ret+=instructions.at(i).to_string()+'\n';
+    }
+
+    return ret;
+}
+
+std::string asm_program::to_string(){
+    std::string ret;
+    ret+="section .bss\n";
+
+    for (int i=0;i<bss.size();i++){
+        ret+=bss.at(i).to_string()+'\n';
+    }
+
+    ret+="section .data\n";
+
+    for (int i=0;i<data.size();i++){
+        ret+=data.at(i).to_string()+'\n';
+    }
+    
+    ret+="section .text\n";
+
+    ret+="global _start\n_start:\n";
+
+    for (int i=0;i<_start.instructions.size();i++){
+        ret+=_start.instructions.at(i).to_string()+'\n';
+    }
+
+    for (int i=0;i<functions.size();i++){
+        ret+=functions.at(i)->to_string()+'\n';
+
+    }
+
+    return ret;
+
 }

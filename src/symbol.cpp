@@ -67,7 +67,8 @@ void symbol_table::inc_locals_count(){
 
 void symbol_table::push(symbol* s){
     table.push_back(s);
-    inc_locals_count();
+    if (s->type==symbol_type::LOCAL)
+        inc_locals_count();
 }
 
 inline std::string symbol::get_nasm_label(){
@@ -78,8 +79,6 @@ void symbol_table::push_params(std::vector<token> &params){
     int offset=16;
     
     for (int i=0;i<params.size();i++){
-        if (params[i].type!=token_type::IDENTIFIER)
-            emit_error(error::SEMANTIC_ERROR,"Expected identifier",params[i].line_number);
 
         symbol* s=new symbol(symbol_type::LOCAL);
         s->offset=offset;
@@ -87,7 +86,7 @@ void symbol_table::push_params(std::vector<token> &params){
         
         offset+=8;
 
-        push(s);
+        table.push_back(s);
 
     }
     

@@ -27,4 +27,4 @@ void emit_error(error err, std::string msg);
 
 std::string sformat(std::string str, ...);
 
-bool is_binary_operator(std::string &str);
+bool is_binary_operator(std::string str);
