@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <fstream>
 #include <cstdint>
+#include <filesystem>
 
 #include "utils.h"
 #include "token.h"
@@ -19,7 +20,7 @@ void print_help(){
 
 }
 
-std::string get_file_as_string(std::string &file_name){
+std::string get_file_as_string(std::string file_name){
     std::ifstream s(file_name);
     std::string ret,line;
     
@@ -30,6 +31,19 @@ std::string get_file_as_string(std::string &file_name){
 
     return ret;
 
+}
+
+std::string get_dir(std::string filename){
+    int i;
+    for (i=filename.size()-1;i>=0 && filename[i]!='/';i--);
+    if (filename[i]!='/')return "";
+    return filename.substr(0,i+1);
+
+}
+
+std::string get_file_as_string(std::string dir, std::string filename){
+    if (dir.empty())return get_file_as_string(filename);
+    return get_file_as_string(dir+"/"+filename);
 }
 
 token_list lex(std::string &file){
@@ -595,7 +609,7 @@ ast_node* parse_primary(token_list &list){
             list.expect(")");
 
         }
-
+        
         if (list.match("$")){
             ast_node* node2=new ast_node(ast_node_type::ARRAY_ACCESS);
 
@@ -625,6 +639,12 @@ ast_node* parse_primary(token_list &list){
         return node;
 
     }
+    else if (list.match(token_type::REGISTER)){
+        ast_node* node=new ast_node(ast_node_type::REGISTER);
+        node->value=list++.value;
+
+        return node;
+    }
     else if (list.match("(")){
         ast_node* node=new ast_node(ast_node_type::EXPRESSION);
         list++; //advance past '('
@@ -638,6 +658,12 @@ ast_node* parse_primary(token_list &list){
     else if (list.match("true") || list.match("false")){
         ast_node* node=new ast_node(ast_node_type::NUMBER);
         node->value=list.match("true")?"1":"0";
+        list++;
+        return node;
+    }
+    else if (list.match("NULL")){
+        ast_node* node=new ast_node(ast_node_type::NUMBER);
+        node->value="0";
         list++;
         return node;
     }
@@ -1111,6 +1137,88 @@ ast_node* parse_if(token_list &list){
         
 }
 
+void parse_asm_mem_operand(token_list &list, ast_node* node){
+    list++;
+    node->operand1='[';
+    do{
+        token t=list++;
+        if (t.type==token_type::OPERATOR){
+            if (node->operand1.size()==1 || (t.value!="+" && t.value!="*" && t.value!="-")){
+                emit_error(error::SYNTAX_ERROR, "Operator '"+t.value+"' not allowed here",t.line_number);
+            }
+            node->operand1+=t.value;
+            t=list++;
+        }
+        if (t.type!=token_type::REGISTER && t.type!=token_type::NUMBER){
+            emit_error(error::SYNTAX_ERROR,"'"+token_type_to_string(t.type)+"' not allowed here",t.line_number);
+        }
+
+        node->operand1+=t.value;
+
+    }while (!list.end() && !list.match("]"));
+
+    list.expect("]");
+
+    node->operand1+=']';
+
+}
+
+ast_node* parse_asm_statement(token_list &list){
+    ast_node* node=new ast_node(ast_node_type::ASM);
+
+    std::string keyword=list++.value;
+    int instruction_length=get_asm_instruction_length(keyword);
+
+    node->opcode=keyword;
+
+    if (instruction_length==1){
+        list.expect(";");
+        return node;
+    }
+
+    bool is_mem=false;
+
+    if (list.match("[")){
+        is_mem=true;
+        parse_asm_mem_operand(list,node);
+
+    }
+    else if (is_register(list.peek().value)){
+        node->operand1=list++.value;
+
+    }
+    else{
+        node->operand1_node=parse_expression(list);
+
+    }
+
+    if (instruction_length==2){
+        list.expect(";");
+        return node;
+    }
+
+    list.expect(",");
+
+    if (list.match("[")){
+        if (is_mem){
+            emit_error(error::SYNTAX_ERROR,"Cannot have two memory operands",list.peek().line_number);
+        }
+        parse_asm_mem_operand(list,node);
+    }
+    else if (is_register(list.peek().value)){
+        node->operand2=list++.value;
+    }
+    else{
+        node->operand2_node=parse_expression(list);
+
+    }
+
+    list.expect(";");
+
+    return node;
+
+}
+
 ast_node* parse_statement(token_list &list){
 
     if (list.match(token_type::KEYWORD)){
@@ -1136,6 +1244,9 @@ ast_node* parse_statement(token_list &list){
             return parse_if(list);
         }
 
+    }
+    else if (list.match(token_type::ASM)){
+        return parse_asm_statement(list);
     }
     else if (list.match("{")){
         return parse_block(list);
@@ -1246,7 +1357,9 @@ void generate_expression(asm_program &program, asm_function* function, symbol_ta
     if (is_binary_operator(node->value) && node->type==ast_node_type::EXPRESSION){
         generate_expression(program,function,table,node->left, false);
         function->push(instruction("PUSH","RAX"));
+        function->push(instruction("PUSH","R8"));
         generate_expression(program,function,table,node->right, false);
+        function->push(instruction("POP","R8"));
         function->push(instruction("MOV","RBX","RAX"));
         function->push(instruction("POP","RAX"));
 
@@ -1319,6 +1432,18 @@ void generate_expression(asm_program &program, asm_function* function, symbol_ta
 
 
     }
+    else if (node->type==ast_node_type::REGISTER){
+        if (node->value!="RAX"){
+            if (!is_reg64(node->value)){
+                function->push(instruction("MOVZX","RAX",node->value));
+            }
+            else{
+                function->push(instruction("MOV","RAX","node->value"));
+            }
+            
+        }
+        
+    }
     else if (node->type==ast_node_type::UNARY){
 
         if (node->value=="*"){
@@ -1328,6 +1453,9 @@ void generate_expression(asm_program &program, asm_function* function, symbol_ta
                 function->push(instruction("MOV","RAX","[RAX]"));
             }
 
+        }
+        else if (node->value=="+"){
+            generate_expression(program,function,table,node->right,false);
         }
         else if (node->value=="!"){
             generate_expression(program,function,table,node->right,false);
@@ -1454,9 +1582,11 @@ void generate_expression(asm_program &program, asm_function* function, symbol_ta
     else if (node->type==ast_node_type::ARRAY_ACCESS){
         generate_expression(program,function,table,node->left,false);
         function->push(instruction("PUSH","RAX"));
+        function->push(instruction("PUSH","R8"));
 
         generate_expression(program,function,table,node->element_size_reference,false);
 
+        function->push(instruction("POP","R8"));
         function->push(instruction("MOV","R8","RAX"));
 
         function->push(instruction("POP","RAX")); //RAX contains address
@@ -1477,7 +1607,8 @@ void generate_expression(asm_program &program, asm_function* function, symbol_ta
 
             }
             else{
-                function->push(instruction("LEA","RAX","[RAX+RBX*R8]"));
+                function->push(instruction("IMUL","RBX","R8"));
+                function->push(instruction("LEA","RAX","[RAX+RBX]"));
 
             }
 
@@ -1531,9 +1662,11 @@ void generate_expression(asm_program &program, asm_function* function, symbol_ta
             generate_expression(program,function,table,node->left,true);
 
             function->push(instruction("PUSH","RAX"));
+            function->push(instruction("PUSH","R8"));
 
             generate_expression(program,function,table,node->right,false);
 
+            function->push(instruction("POP","R8"));
             function->push(instruction("MOV","RBX","RAX"));
             function->push(instruction("POP","RAX"));
 
@@ -1568,9 +1701,11 @@ void generate_expression(asm_program &program, asm_function* function, symbol_ta
         generate_expression(program,function,table,node->left,false);
 
         function->push(instruction("PUSH","RAX"));
+        function->push(instruction("PUSH","R8"));
 
         generate_expression(program,function,table,node->right,false);
 
+        function->push(instruction("POP","R8"));
         function->push(instruction("MOV","RBX","RAX"));
 
         function->push(instruction("POP","RAX"));
@@ -1632,7 +1767,7 @@ void generate_expression(asm_program &program, asm_function* function, symbol_ta
         function->push(instruction("CALL","RAX"));
 
         if (node->args.size()){
-            function->push(instruction("ADD","RBP",std::to_string(node->args.size()*8)));
+            function->push(instruction("ADD","RSP",std::to_string(node->args.size()*8)));
         }
 
     }
@@ -1686,7 +1821,11 @@ void generate_array(asm_program &program, asm_function* function, ast &indexes, 
         if (esr<2)dsize=data_size::BYTE;
         else if (esr<4)dsize=data_size::WORD;
         else if (esr<8)dsize=data_size::DWORD;
-        else dsize=data_size::QWORD;
+        else if (esr==8)dsize=data_size::QWORD;
+        else {
+            cur_size=1+((cur_size*esr)/8);
+            dsize=data_size::QWORD;
+        }
     }
     else{
         dsize=data_size::QWORD;
@@ -1877,6 +2016,95 @@ void generate_if(asm_program &program, asm_function* function, symbol_table* tab
 
 }
 
+void pushaq(asm_function* function){
+    function->push(instruction("PUSH","RAX"));
+    function->push(instruction("PUSH","RBX"));
+    function->push(instruction("PUSH","RCX"));
+    function->push(instruction("PUSH","RDX"));
+    function->push(instruction("PUSH","RDI"));
+    function->push(instruction("PUSH","RSI"));
+    function->push(instruction("PUSH","RBP"));
+    function->push(instruction("PUSH","RSP"));
+    function->push(instruction("PUSH","R8"));
+    function->push(instruction("PUSH","R9"));
+    function->push(instruction("PUSH","R10"));
+    function->push(instruction("PUSH","R11"));
+    function->push(instruction("PUSH","R12"));
+    function->push(instruction("PUSH","R13"));
+    function->push(instruction("PUSH","R14"));
+
+}
+
+void popaq(asm_function* function){
+    function->push(instruction("POP","R14"));
+    function->push(instruction("POP","R13"));
+    function->push(instruction("POP","R12"));
+    function->push(instruction("POP","R11"));
+    function->push(instruction("POP","R10"));
+    function->push(instruction("POP","R9"));
+    function->push(instruction("POP","R8"));
+    function->push(instruction("POP","RSP"));
+    function->push(instruction("POP","RBP"));
+    function->push(instruction("POP","RSI"));
+    function->push(instruction("POP","RDI"));
+    function->push(instruction("POP","RDX"));
+    function->push(instruction("POP","RCX"));
+    function->push(instruction("POP","RBX"));
+    function->push(instruction("POP","RAX"));
+
+}
+
+void generate_asm(asm_program &program, asm_function* function, symbol_table* table, ast_node* node){
+    std::string opcode=node->opcode;
+
+    int instruction_length=get_asm_instruction_length(opcode);
+
+    if (instruction_length==1){
+        function->push(instruction(opcode));
+        return;
+    }
+
+    if (instruction_length==2){
+        if (node->operand1_node==nullptr){
+            function->push(instruction(opcode,node->operand1));
+        }
+        else{
+            generate_expression(program,function,table,node->operand1_node,false);
+            function->push(instruction(opcode,"RAX"));
+        }
+        return;
+    }
+
+    std::string op1,op2;
+
+    if (node->operand1_node==nullptr){
+        op1=node->operand1;
+
+    }
+    else{
+        pushaq(function);
+        generate_expression(program,function,table,node->operand1_node,true);
+        function->push(instruction("MOV","R15","RAX"));
+        popaq(function);
+        op1="[R15]";
+
+    }
+    if (node->operand2_node==nullptr){
+        op2=node->operand2;
+    }
+    else{
+        pushaq(function);
+        generate_expression(program,function,table,node->operand2_node,false);
+        function->push(instruction("MOV","R15","RAX"));
+        popaq(function);
+        op2="R15";
+
+    }
+
+    function->push(instruction(opcode,op1,op2));
+
+}
+
 void generate_statement(asm_program &program, asm_function* function, symbol_table* table, ast_node* node){
     if (node==nullptr)return;
 
@@ -1900,6 +2128,9 @@ void generate_statement(asm_program &program, asm_function* function, symbol_tab
     }
     else if (node->type==ast_node_type::IF){
         generate_if(program,function,table,node);
+    }
+    else if (node->type==ast_node_type::ASM){
+        generate_asm(program,function,table,node);
     }
     else{
         generate_expression(program,function,table,node,false);
@@ -1932,9 +2163,17 @@ void generate_function(asm_program &program, ast_node* node){
 
 void generate_code(asm_program &program, symbol_table* table, ast &tree){
     program._start.push(instruction("MOV","R8","8"));
+    program._start.push(instruction("bits","64"));
+    program._start.push(instruction("default","rel"));
 
+    {
+        std::string tmp="main";
+
+        if (table->lookup(tmp)==nullptr){
+            emit_error(error::CODE_GENERATION_ERROR,"No main function");
+        }
+    }
     
-
     for (int i=0;i<tree.size();i++){
         ast_node* node=tree.get(i);
 
@@ -1964,11 +2203,88 @@ void generate_code(asm_program &program, symbol_table* table, ast &tree){
 
 }
 
+std::string expand(std::filesystem::path path){
+    std::string src=get_file_as_string(path.string());
+
+    token_list list=lex(src);
+
+    std::filesystem::path dir=path.parent_path();
+    
+    std::string out;
+
+    while (list.seti("#include")){
+        list++;
+
+        std::filesystem::path inc=dir/list.peek().value;
+
+        out+=expand(inc);
+
+    }
+
+    return out+src;
+
+}
+
+void replace(token_list &list){
+    typedef struct replace_t{
+        std::string str;
+        token replacement;
+        replace_t(std::string str, token replacement){
+            this->str=str;
+            this->replacement=replacement;
+        }
+
+    }replace_t;
+
+    std::vector<replace_t> replacements;
+
+    while (list.seti("#define")){
+        int i=list.i;
+        list++;
+
+        std::string str=list++.value;
+        token replacement=list++;
+
+        replacements.push_back(replace_t(str,replacement));
+
+        for (int j=0;j<3;j++){
+            list.remove(i);
+        }
+        
+    }
+
+    for (replace_t r:replacements){
+        for (int i=0;i<list.size();i++){
+            if (list.at(i).value==r.str){
+                list.set(i,r.replacement);
+            }
+        }
+    }
+
+    list.seti(0);
+}
+
+void get_includes(std::string &filestr){
+    filestr=expand(std::filesystem::path(input_file));
+
+}
+
+void remove_includes(token_list &list){
+    while (list.seti("#include")){
+        int i=list.i;
+        list.remove(i);
+        list.remove(i);
+    }
+    list.seti(0);
+}
+
 int main(int argc, char** argv){
     std::cout << "MUST HAVE NASM INSTALLED!" << std::endl << std::endl;
 
     bool asm_only=false;
 
+    char* whoami=argv[0];
+    
     for (int i=1;i<argc;i++){
         if ((std::string)argv[i]=="--help"){
             print_help();
@@ -1990,10 +2306,16 @@ int main(int argc, char** argv){
 
     input_file=argv[1],output_file=argv[2];
 
-    std::string file=get_file_as_string(input_file);
+    std::string file;
+
+    get_includes(file);
 
     token_list tokens=lex(file);
 
+    remove_includes(tokens);
+
+    replace(tokens);
+    
     ast tree=parse(tokens);
 
     symbol_table* global_table=new symbol_table(symbol_table_type::GLOBAL);
@@ -2026,5 +2348,6 @@ int main(int argc, char** argv){
         std::system(cmd3.c_str());
 
     }
+    
     return 0;
 }

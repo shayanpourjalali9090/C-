@@ -10,6 +10,7 @@ token::token(token_type type){
 token::token(std::string str){
     type=is_numeric(str)?token_type::NUMBER
     :is_register(str)?token_type::REGISTER
+    :is_asm_keyword(str)?token_type::ASM
     :is_keyword(str)?token_type::KEYWORD
     :token_type::IDENTIFIER;
     
@@ -49,6 +50,9 @@ std::string token_type_to_string(token_type type){
         }
         case token_type::STRING:{
             return "String";
+        }
+        case token_type::ASM:{
+            return "Asm";
         }
         default:return "";
     }
@@ -137,4 +141,29 @@ std::string token_list::to_string(){
     }
     ret+="\t"+at(j).to_string()+"\n\n]";
     return ret;
+}
+
+void token_list::seti(int i){
+    this->i=i;
+}
+
+bool token_list::seti(std::string find){
+    for (int j=i;j<tokens.size();j++){
+        if (tokens.at(j).value==find){
+            i=j;
+            return true;
+        }
+    }
+    return false;
+}
+
+void token_list::set(int i,token t){
+    tokens.at(i).value=t.value;
+    tokens.at(i).type=t.type;
+}
+
+
+void token_list::remove(int i){
+    tokens.erase(tokens.begin()+i);
+
 }

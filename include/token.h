@@ -11,6 +11,7 @@ enum class token_type{
     DELIMITER,
     NUMBER,
     REGISTER,
+    ASM,
     END_OF_FILE,
 
 };
@@ -70,6 +71,14 @@ class token_list{
     token operator++(int);
 
     void push(token t);
+
+    void set(int i,token t);
+
+    void seti(int i);
+
+    void remove(int i);
+
+    bool seti(std::string find);
 
     std::string to_string();
 

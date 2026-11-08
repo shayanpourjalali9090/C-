@@ -3,17 +3,20 @@
 ast_node::ast_node()
     : left(nullptr), right(nullptr), else_node(nullptr), 
     true_node(nullptr), false_node(nullptr), condition(nullptr),
-    table(nullptr),element_size_reference(nullptr){}
+    table(nullptr), element_size_reference(nullptr), operand1_node(nullptr), 
+    operand2_node(nullptr){}
 
 ast_node::ast_node(ast_node_type type, std::string value)
     : type(type), value(value), left(nullptr), right(nullptr), 
     else_node(nullptr), true_node(nullptr), false_node(nullptr), 
-    condition(nullptr), table(nullptr), element_size_reference(nullptr){}
+    condition(nullptr), table(nullptr), element_size_reference(nullptr), 
+    operand1_node(nullptr), operand2_node(nullptr){}
 
 ast_node::ast_node(ast_node_type type)
     : type(type), left(nullptr), right(nullptr), 
     else_node(nullptr), true_node(nullptr), false_node(nullptr), 
-    condition(nullptr), table(nullptr),element_size_reference(nullptr){}
+    condition(nullptr), table(nullptr),element_size_reference(nullptr), 
+    operand1_node(nullptr), operand2_node(nullptr){}
 
 ast_node::~ast_node(){
     delete left;
@@ -77,6 +80,7 @@ std::string node_type_to_string(ast_node_type type){
         "ELIF",
         "ELSE",
         "ASM",
+        "REGISTER",
     };
 
     return node_type_strs[(int)type];

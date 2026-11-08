@@ -27,6 +27,7 @@ enum class ast_node_type{
     ELIF,
     ELSE,
     ASM,
+    REGISTER,
 
 };
 
@@ -72,9 +73,9 @@ class ast_node{
     void print(int depth);
 
     ast_node_type type;
-    ast_node *left,*right,*condition,*true_node,*false_node,*else_node,*element_size_reference;
+    ast_node *left,*right,*condition,*true_node,*false_node,*else_node,*element_size_reference,*operand1_node,*operand2_node;
     ast args,children,elifs,indexes,elements;
-    std::string value,identifier;
+    std::string value,identifier,opcode,operand1,operand2;
     std::vector<token> params;
     symbol_table* table;
     bool function_declaration;
