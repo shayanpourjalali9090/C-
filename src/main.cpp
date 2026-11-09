@@ -213,7 +213,7 @@ token_list lex(std::string &file){
                 case '-':{
                     buf='-';
                     if (i!=file.length()-1){
-                        if (file[i+1]=='-' || file[i+1]=='='){
+                        if (file[i+1]=='-' || file[i+1]=='=' || file[i+1]=='>'){
                             buf+=file[i+1];
                             i++;
                         }
@@ -589,8 +589,7 @@ ast_node* parse_primary(token_list &list){
     else if (list.match(token_type::IDENTIFIER)){
         ast_node* node=new ast_node(ast_node_type::IDENTIFIER);
 
-        node->identifier=list.expect(token_type::IDENTIFIER).value;
-
+        node->identifier=list++.value;
         
         if (list.match("(")){
             int tmp_line_number=list.peek().line_number;
@@ -609,35 +608,20 @@ ast_node* parse_primary(token_list &list){
             list.expect(")");
 
         }
-        
-        if (list.match("$")){
-            ast_node* node2=new ast_node(ast_node_type::ARRAY_ACCESS);
-
-            list.expect("$");
-            node2->element_size_reference=parse_expression(list);
-
-            do{
-                list.expect("[");
-                ast_node* index=parse_expression(list);
-                node2->indexes.push(index);
-                list.expect("]");
-
-            }while(list.match("["));
-
-            node2->left=node;
-            node=node2;
-
-        }
-
-        if (list.match("++") || list.match("--")){
-            ast_node* node2=new ast_node(ast_node_type::EXPRESSION);
-            node2->value=list++.value;
-            node2->left=node;
-            node=node2;
-        }
 
         return node;
 
+    }
+    else if (list.match("sizeof")){
+        ast_node* node=new ast_node(ast_node_type::SIZEOF);
+        list++;
+
+        list.expect("(");
+        token t=list.expect(token_type::IDENTIFIER);
+        list.expect(")");
+
+        node->identifier=t.value;
+        return node;
     }
     else if (list.match(token_type::REGISTER)){
         ast_node* node=new ast_node(ast_node_type::REGISTER);
@@ -646,7 +630,7 @@ ast_node* parse_primary(token_list &list){
         return node;
     }
     else if (list.match("(")){
-        list++; //advance past '('
+        list++;
 
         ast_node* node=parse_expression(list);
 
@@ -676,8 +660,63 @@ ast_node* parse_primary(token_list &list){
 
 }
 
-ast_node* parse_unary(token_list &list){
+ast_node* parse_member_access(token_list &list){
+    ast_node* node=parse_primary(list);
 
+    if (list.match(".") || list.match("->")){
+        ast_node* node2=new ast_node(ast_node_type::MEMBER_ACCESS);
+        node2->value=list++.value;
+
+        node2->left=node;
+        node2->right=parse_member_access(list);
+
+        node=node2;
+    }
+
+    return node;
+}
+
+ast_node* parse_array_access(token_list &list){
+    ast_node* node=parse_member_access(list);
+
+    if (list.match("$")){
+        ast_node* node2=new ast_node(ast_node_type::ARRAY_ACCESS);
+
+        list.expect("$");
+        node2->element_size_reference=parse_expression(list);
+
+        do{
+            list.expect("[");
+            ast_node* index=parse_expression(list);
+            node2->indexes.push(index);
+            list.expect("]");
+
+        }while(list.match("["));
+
+        node2->left=node;
+        node=node2;
+
+    }
+
+    return node;
+
+}
+
+ast_node* parse_postfix(token_list &list){
+    ast_node* node=parse_array_access(list);
+
+    if (list.match("++") || list.match("--")){
+        ast_node* node2=new ast_node(ast_node_type::EXPRESSION);
+        node2->value=list++.value;
+
+        node2->left=node;
+        node=node2;
+    }
+
+    return node;
+}
+
+ast_node* parse_unary(token_list &list){
     if (list.match("+") || list.match("-") || list.match("!") || 
         list.match("~") || list.match("@") || list.match("++") || 
         list.match("--") || list.match("*")){
@@ -691,7 +730,7 @@ ast_node* parse_unary(token_list &list){
 
     }
 
-    return parse_primary(list);
+    return parse_postfix(list);
 
 }
 
@@ -927,13 +966,14 @@ ast_node* parse_array(token_list &list){
 }
 
 ast_node* parse_declaration(token_list &list){
+    list++;
+
     ast_node* node=new ast_node(ast_node_type::DECLARATION);
 
-    list++; //advance past let
     node->identifier=list.expect(token_type::IDENTIFIER).value;
 
     if (list.match("$")){
-        list.expect("$");
+        list++;
 
         int lineno=list.peek().line_number;
 
@@ -1197,10 +1237,41 @@ ast_node* parse_asm_statement(token_list &list){
 
 }
 
+ast_node* parse_struct(token_list &list){
+    list++; //advance past let
+    list++; //advance past struct
+
+    ast_node* node=new ast_node(ast_node_type::STRUCT);
+    node->identifier=list.expect(token_type::IDENTIFIER).value;
+
+    list.expect("{");
+
+    while (!list.match("}")){
+        ast_node* decl=parse_statement(list);
+
+        if (decl!=nullptr && decl->type!=ast_node_type::ARRAY_DECLARATION && decl->type!=ast_node_type::DECLARATION){
+            emit_error(error::SYNTAX_ERROR,"Illegal statement within struct '"+node->identifier+"' definition");
+        }
+        if (decl->right){
+            emit_error(error::SYNTAX_ERROR,"Assignments not allowed in struct definition");
+        }
+        if (decl){
+            node->children.push(decl);
+        }
+    }
+    list.expect("}");
+    
+    return node;
+
+}
+
 ast_node* parse_statement(token_list &list){
 
     if (list.match(token_type::KEYWORD)){
         if (list.match("let")){
+            if (list.lookahead().value=="struct"){
+                return parse_struct(list);
+            }
             return parse_declaration(list);
         }
         if (list.match("func")){
@@ -1598,19 +1669,15 @@ void generate_expression(asm_program &program, asm_function* function, symbol_ta
         }
             
     }
-    else if (node->value=="=" || node->value=="+=" || node->value=="-=" || node->value=="*=" || 
-        node->value=="^=" || node->value=="&=" || node->value=="|=" || node->value==">>=" || 
-        node->value=="<<="){
+    else if (node->value=="=" || node->value=="+=" || node->value=="-=" || 
+        node->value=="^=" || node->value=="&=" || node->value=="|="){
             std::string opc;
             if (node->value=="=")opc="MOV";
             else if (node->value=="+=")opc="ADD";
             else if (node->value=="-=")opc="SUB";
-            else if (node->value=="*=")opc="IMUL";
             else if (node->value=="^=")opc="XOR";
             else if (node->value=="|=")opc="OR";
             else if (node->value=="&=")opc="AND";
-            else if (node->value==">>=")opc="SHR";
-            else if (node->value=="<<=")opc="SHL";
 
             generate_expression(program,function,table,node->left,true);
 
@@ -1673,6 +1740,54 @@ void generate_expression(asm_program &program, asm_function* function, symbol_ta
             function->push(instruction("MOV","RAX","RDX"));
         }
 
+        function->push(instruction("MOV","RBX","RAX"));
+
+        generate_expression(program,function,table,node->left,true);
+
+        std::string _2=function->create_local_label();
+        std::string _4=function->create_local_label();
+        std::string _8=function->create_local_label();
+        std::string donel=function->create_local_label();
+
+        function->push(instruction("CMP","R8","2"));
+        function->push(instruction("JGE",_2));
+        function->push(instruction("MOV","[RAX]","BL"));
+        function->push(instruction("JMP",donel));
+        function->push_local_label(_2);
+        function->push(instruction("CMP","R8","4"));
+        function->push(instruction("JGE",_4));
+        function->push(instruction("MOV","[RAX]","BX"));
+        function->push(instruction("JMP",donel));
+        function->push_local_label(_4);
+        function->push(instruction("CMP","R8","8"));
+        function->push(instruction("JGE",_8));
+        function->push(instruction("MOV","[RAX]","EBX"));
+        function->push(instruction("JMP",donel));
+        function->push_local_label(_8);
+        function->push(instruction("MOV","[RAX]","RBX"));
+        function->push_local_label(donel);
+        function->push(instruction("MOV","R8","8"));
+
+        function->push(instruction("POP","RAX"));
+
+    }
+    else if (node->value==">>=" || node->value=="<<=" || node->value=="*="){
+        std::string opc=node->value=="*="?"IMUL"
+            :node->value==">>="?"SHR"
+            :"SHL";
+
+        generate_expression(program,function,table,node->left,false);
+
+        function->push(instruction("PUSH","RAX"));
+
+        generate_expression(program,function,table,node->right,false);
+
+        function->push(instruction("MOV","RBX","RAX"));
+        function->push(instruction("POP","RAX"));
+
+        function->push(instruction(opc,"RAX","RBX"));
+
+        function->push(instruction("PUSH","RBX"));
         function->push(instruction("MOV","RBX","RAX"));
 
         generate_expression(program,function,table,node->left,true);
@@ -2138,6 +2253,15 @@ void generate_code(asm_program &program, symbol_table* table, ast &tree){
 
 }
 
+std::vector<std::filesystem::path> paths;
+
+bool paths_contains(std::filesystem::path name){
+    for (int i=0;i<paths.size();i++){
+        if (paths.at(i)==name)return true;
+    }
+    return false;
+}
+
 std::string expand(std::filesystem::path path){
     std::string src=get_file_as_string(path.string());
 
@@ -2151,6 +2275,7 @@ std::string expand(std::filesystem::path path){
         list++;
         std::string name=list.peek().value;
         std::filesystem::path inc;
+
         if (name.rfind("~/",0)==0){
             name=name.substr(2);
             name=std::getenv("HOME")+("/"+name);
@@ -2158,8 +2283,10 @@ std::string expand(std::filesystem::path path){
         }else{
             inc=dir/name;
         }
-
-        out+=expand(inc);
+        if (!paths_contains(inc)){
+            paths.push_back(inc);
+            out+=expand(inc);
+        }
 
     }
 
@@ -2259,7 +2386,8 @@ int main(int argc, char** argv){
     replace(tokens);
     
     ast tree=parse(tokens);
-
+    tree.print(0);
+    return 0;
     symbol_table* global_table=new symbol_table(symbol_table_type::GLOBAL);
 
     for (int i=0;i<tree.size();i++)

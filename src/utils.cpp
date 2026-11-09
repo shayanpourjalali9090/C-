@@ -20,7 +20,7 @@ const std::string operators[]={
 const std::string keywords[]={
     "let","while","if","else","func",
     "return","break","continue","true","false",
-    "NULL",
+    "NULL", "sizeof"
 };
 
 const std::string asm_keywords[]={

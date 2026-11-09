@@ -28,6 +28,10 @@ enum class ast_node_type{
     ELSE,
     ASM,
     REGISTER,
+    SIZEOF,
+    MEMBER_ACCESS,
+    STRUCT,
+    STRUCT_DECLARATION,
 
 };
 

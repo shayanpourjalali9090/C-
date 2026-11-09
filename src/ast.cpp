@@ -81,6 +81,10 @@ std::string node_type_to_string(ast_node_type type){
         "ELSE",
         "ASM",
         "REGISTER",
+        "SIZEOF",
+        "MEMBER_ACCESS",
+        "STRUCT",
+        "STRUCT_DECLARATION",
     };
 
     return node_type_strs[(int)type];
