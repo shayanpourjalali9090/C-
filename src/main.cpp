@@ -646,10 +646,9 @@ ast_node* parse_primary(token_list &list){
         return node;
     }
     else if (list.match("(")){
-        ast_node* node=new ast_node(ast_node_type::EXPRESSION);
         list++; //advance past '('
 
-        node->right=parse_expression(list);
+        ast_node* node=parse_expression(list);
 
         list.expect(")");
 
@@ -1027,12 +1026,6 @@ ast_node* parse_function(token_list &list){
 
     list.expect(")");
 
-    if (list.match(";")){
-        list.expect(";");
-        node->function_declaration=true;
-        return node;
-    }
-
     list.expect("{");
 
     while (!list.end() && !list.match("}")){
@@ -1107,22 +1100,6 @@ ast_node* parse_if(token_list &list){
 
     node->right=parse_statement(list);
 
-    while (list.match("elif")){
-        ast_node* elif_node=new ast_node(ast_node_type::ELIF);
-        list.expect("elif");
-
-        list.expect("(");
-
-        elif_node->condition=parse_expression(list);
-
-        list.expect(")");
-
-        elif_node->right=parse_statement(list);
-
-        node->elifs.push(elif_node);
-        
-    }
-
     if (list.match("else")){
         ast_node* else_node=new ast_node(ast_node_type::ELSE);
         list.expect("else");
@@ -1137,29 +1114,30 @@ ast_node* parse_if(token_list &list){
         
 }
 
-void parse_asm_mem_operand(token_list &list, ast_node* node){
+void parse_asm_mem_operand(token_list &list, ast_node* node, bool operand1){
     list++;
-    node->operand1='[';
+    std::string &operand=operand1?node->operand1:node->operand2;
+    operand='[';
     do{
         token t=list++;
         if (t.type==token_type::OPERATOR){
-            if (node->operand1.size()==1 || (t.value!="+" && t.value!="*" && t.value!="-")){
+            if (operand.size()==1 || (t.value!="+" && t.value!="*" && t.value!="-")){
                 emit_error(error::SYNTAX_ERROR, "Operator '"+t.value+"' not allowed here",t.line_number);
             }
-            node->operand1+=t.value;
+            operand+=t.value;
             t=list++;
         }
         if (t.type!=token_type::REGISTER && t.type!=token_type::NUMBER){
             emit_error(error::SYNTAX_ERROR,"'"+token_type_to_string(t.type)+"' not allowed here",t.line_number);
         }
 
-        node->operand1+=t.value;
+        operand+=t.value;
 
     }while (!list.end() && !list.match("]"));
 
     list.expect("]");
 
-    node->operand1+=']';
+    operand+=']';
 
 }
 
@@ -1180,7 +1158,7 @@ ast_node* parse_asm_statement(token_list &list){
 
     if (list.match("[")){
         is_mem=true;
-        parse_asm_mem_operand(list,node);
+        parse_asm_mem_operand(list,node,true);
 
     }
     else if (is_register(list.peek().value)){
@@ -1200,10 +1178,10 @@ ast_node* parse_asm_statement(token_list &list){
     list.expect(",");
 
     if (list.match("[")){
-        if (is_mem){
+        if (is_mem || node->operand1.empty()){
             emit_error(error::SYNTAX_ERROR,"Cannot have two memory operands",list.peek().line_number);
         }
-        parse_asm_mem_operand(list,node);
+        parse_asm_mem_operand(list,node,false);
     }
     else if (is_register(list.peek().value)){
         node->operand2=list++.value;
@@ -1271,83 +1249,58 @@ ast parse(token_list &list){
     
 }
 
-void build_symbol_table(ast &tree, symbol_table* table){
-    for (int i=0;i<tree.size();i++){
-        ast_node* node=tree.get(i);
+void build_symbol_table(ast_node* node, symbol_table* table){   
+    if (node==nullptr)return;
+
+    if (node->type==ast_node_type::DECLARATION || node->type==ast_node_type::ARRAY_DECLARATION){
+        symbol* s=new symbol(node->identifier);
+
+        if (table->type!=symbol_table_type::GLOBAL){
+            s->type=symbol_type::LOCAL;
+            s->offset=table->cur_offset;
+            
+            table->cur_offset-=8;
+        }
+        else{
+            s->type=symbol_type::GLOBAL;
+        }
         
-        if (node->type==ast_node_type::DECLARATION || node->type==ast_node_type::ARRAY_DECLARATION){
-            symbol* s=new symbol(node->identifier);
-
-            if (table->type!=symbol_table_type::GLOBAL){
-                s->type=symbol_type::LOCAL;
-                s->offset=table->cur_offset;
-                
-                table->cur_offset-=8;
-            }
-            else{
-                s->type=symbol_type::GLOBAL;
-            }
-            
-            table->push(s);
-            
-        }
-        else if (node->type==ast_node_type::FUNCTION_DEFINITION){
-            symbol* s=table->lookup(node->identifier);
-
-            if (s==nullptr){
-                s=new symbol(node->identifier);
-                s->type=symbol_type::FUNCTION;
-                table->push(s);
-
-            }
-
-            if (!node->function_declaration){
-                node->table=new symbol_table(symbol_table_type::FUNCTION,table,-8);
-                build_symbol_table(node->children,node->table);
-                node->table->push_params(node->params);
-
-            }
-
-
-        }
-        else if (node->type==ast_node_type::BLOCK){
-            if (table->type==symbol_table_type::GLOBAL){
-                emit_error(error::SEMANTIC_ERROR,"Unexpected block statement");
-
-            }
-            node->table=new symbol_table(symbol_table_type::BLOCK,table,table->cur_offset);
-            build_symbol_table(node->children,node->table);
-
-        }
-        else if (node->type==ast_node_type::LOOP){
-            if (node->right && node->right->type==ast_node_type::BLOCK){
-                node->right->table=new symbol_table(symbol_table_type::BLOCK,table,table->cur_offset);
-                build_symbol_table(node->right->children,node->right->table);
-
-            }
-
-        }
-        else if (node->type==ast_node_type::IF){
-            if (node->right && node->right->type==ast_node_type::BLOCK){
-                node->right->table=new symbol_table(symbol_table_type::BLOCK,table,table->cur_offset);
-                build_symbol_table(node->right->children,node->right->table);
-
-            }
-            for (int i=0;i<node->elifs.size();i++){
-                ast_node* elif=node->elifs.get(i);
-
-                if (elif->right && elif->right->type==ast_node_type::BLOCK){
-                    elif->right->table=new symbol_table(symbol_table_type::BLOCK,table,table->cur_offset);
-                    build_symbol_table(elif->right->children,elif->right->table);
-                }
-            }
-            if (node->else_node && node->else_node->right && node->else_node->right->type==ast_node_type::BLOCK){
-                node->else_node->right->table=new symbol_table(symbol_table_type::BLOCK,table,table->cur_offset);
-                build_symbol_table(node->else_node->right->children, node->else_node->right->table);
-            }
-        }
+        table->push(s);
         
     }
+    else if (node->type==ast_node_type::FUNCTION_DEFINITION){
+        symbol* s=new symbol(node->identifier);
+        s->type=symbol_type::FUNCTION;
+        table->push(s);
+    
+        node->table=new symbol_table(symbol_table_type::FUNCTION,table,-8);
+        for (int i=0;i<node->children.size();i++)
+            build_symbol_table(node->children.get(i),node->table);
+        
+        node->table->push_params(node->params);
+
+    }
+    else if (node->type==ast_node_type::BLOCK){
+        if (table->type==symbol_table_type::GLOBAL){
+            emit_error(error::SEMANTIC_ERROR,"Unexpected block statement");
+
+        }
+        node->table=new symbol_table(symbol_table_type::BLOCK,table,table->cur_offset);
+        for (int i=0;i<node->children.size();i++)
+            build_symbol_table(node->children.get(i),node->table);
+
+    }
+    else if (node->type==ast_node_type::LOOP){
+        build_symbol_table(node->right,table);
+
+    }
+    else if (node->type==ast_node_type::IF){
+        build_symbol_table(node->right,table);
+        if (node->else_node)
+            build_symbol_table(node->else_node->right,table);
+        
+    }
+    
 
 }
 
@@ -1753,7 +1706,9 @@ void generate_expression(asm_program &program, asm_function* function, symbol_ta
     }
     else if (node->type==ast_node_type::FUNCTION_CALL){
         symbol* s=table->lookup(node->identifier);
-
+        if (s==nullptr){
+            emit_error(error::CODE_GENERATION_ERROR,"Unknown function '"+node->identifier+"'");
+        }
         for (int i=node->args.size()-1;i>=0;i--){
             ast_node* arg=node->args.get(i);
 
@@ -1985,32 +1940,14 @@ void generate_if(asm_program &program, asm_function* function, symbol_table* tab
 
     function->push(instruction("CMP","RAX","0"));
     function->push(instruction("JE",notif));
-
+    
     generate_statement(program,function,table,node->right);
     
     function->push(instruction("JMP",endl));
 
     function->push_local_label(notif);
-    
-    for (int i=0;i<node->elifs.size();i++){
-        ast_node* elif=node->elifs.get(i);
 
-        std::string out=function->create_local_label();
-
-        generate_expression(program,function,table,elif->condition,false);
-
-        function->push(instruction("CMP","RAX","0"));
-        function->push(instruction("JE",out));
-
-        generate_statement(program,function,table,elif->right);
-
-        function->push(instruction("JMP",endl));
-
-        function->push_local_label(out);
-
-    }
-
-    generate_statement(program,function,table,node->else_node);
+    if (node->else_node)generate_statement(program,function,table,node->else_node->right);
 
     function->push_local_label(endl);
 
@@ -2163,8 +2100,6 @@ void generate_function(asm_program &program, ast_node* node){
 
 void generate_code(asm_program &program, symbol_table* table, ast &tree){
     program._start.push(instruction("MOV","R8","8"));
-    program._start.push(instruction("bits","64"));
-    program._start.push(instruction("default","rel"));
 
     {
         std::string tmp="main";
@@ -2214,8 +2149,15 @@ std::string expand(std::filesystem::path path){
 
     while (list.seti("#include")){
         list++;
-
-        std::filesystem::path inc=dir/list.peek().value;
+        std::string name=list.peek().value;
+        std::filesystem::path inc;
+        if (name.rfind("~/",0)==0){
+            name=name.substr(2);
+            name=std::getenv("HOME")+("/"+name);
+            inc=name;
+        }else{
+            inc=dir/name;
+        }
 
         out+=expand(inc);
 
@@ -2319,11 +2261,12 @@ int main(int argc, char** argv){
     ast tree=parse(tokens);
 
     symbol_table* global_table=new symbol_table(symbol_table_type::GLOBAL);
-    
-    build_symbol_table(tree,global_table);
+
+    for (int i=0;i<tree.size();i++)
+        build_symbol_table(tree.get(i),global_table);
 
     asm_program program;
-    
+
     generate_code(program,global_table,tree);
 
     std::string nasm_string=program.to_string();

@@ -40,8 +40,8 @@ symbol_table::symbol_table(symbol_table_type type)
 symbol_table::symbol_table(symbol_table_type type, symbol_table* parent, int offset)
     : type(type), parent(parent), cur_offset(offset){}
 
-symbol* symbol_table::lookup(std::string &identifier){
-    for (int i=0;i<table.size();++i){
+symbol* symbol_table::lookup(std::string identifier){
+    for (int i=0;i<table.size();i++){
         if (table.at(i)->name==identifier)
             return table.at(i);
 

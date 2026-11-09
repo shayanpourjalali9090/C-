@@ -18,7 +18,7 @@ const std::string operators[]={
 };
 
 const std::string keywords[]={
-    "let","while","if","elif","else","func",
+    "let","while","if","else","func",
     "return","break","continue","true","false",
     "NULL",
 };

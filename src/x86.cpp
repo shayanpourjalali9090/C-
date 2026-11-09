@@ -198,7 +198,7 @@ std::string asm_function::to_string(){
 }
 
 std::string asm_program::to_string(){
-    std::string ret;
+    std::string ret="default rel\n";
     ret+="section .bss\n";
 
     for (int i=0;i<bss.size();i++){

@@ -51,7 +51,7 @@ class symbol_table{
 
     symbol_table(symbol_table_type type, symbol_table* parent, int offset);
 
-    symbol* lookup(std::string &identifier);
+    symbol* lookup(std::string identifier);
 
     void inc_locals_count();
 
