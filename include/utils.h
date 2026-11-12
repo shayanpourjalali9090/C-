@@ -7,6 +7,7 @@ enum class error{
     SYNTAX_ERROR,
     SEMANTIC_ERROR,
     CODE_GENERATION_ERROR,
+    PREPROCESSING_ERROR,
 };
 
 bool is_reg8(std::string str);
@@ -23,9 +24,11 @@ void is_hex(std::string str);
 
 void is_binary(std::string str);
 
+void is_octal(std::string str);
+
 inline bool is_numeric(char c);
 
-bool is_numeric(std::string &str);
+bool is_numeric(std::string str);
 
 bool is_operator(std::string &str);
 

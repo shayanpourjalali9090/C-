@@ -6,16 +6,17 @@
 #include "utils.h"
 #include "ast.h"
 
-symbol::symbol(){}
+symbol::symbol()
+    : parent_struct(nullptr){}
 
 symbol::symbol(symbol_type type)
-    : type(type){}
+    : type(type), parent_struct(nullptr){}
 
 symbol::symbol(std::string name)
-    : name(name){}
+    : name(name), parent_struct(nullptr){}
 
 symbol::symbol(std::string name, int offset)
-    : name(name), offset(offset){}
+    : name(name), offset(offset), parent_struct(nullptr){}
 
 std::string symbol::get_address(){
     if (type==symbol_type::GLOBAL || type==symbol_type::FUNCTION){
@@ -52,6 +53,33 @@ symbol* symbol_table::lookup(std::string identifier){
     return nullptr;
 }
 
+symbol_table* symbol_table::lookup_struct(std::string identifier){
+    for (int i=0;i<structs.size();i++){
+        if (structs.at(i)->name==identifier){
+            return structs.at(i);
+        }
+    }
+    if (parent){
+        return parent->lookup_struct(identifier);
+    }
+
+    return nullptr;
+
+}
+
+symbol* symbol_table::lookup_field(std::string field_name){
+    for (int i=0;i<struct_fields.size();i++){
+        symbol* field=struct_fields.at(i);
+        if (field->name==field_name)return field;
+
+    }
+
+    if (parent)return parent->lookup_field(field_name);
+    
+    return nullptr;
+
+}
+
 void symbol_table::inc_locals_count(){
     if (type==symbol_table_type::GLOBAL)return;
 
@@ -65,10 +93,22 @@ void symbol_table::inc_locals_count(){
     
 }
 
+void symbol_table::increase_total_size(int size){
+    if (type==symbol_table_type::FUNCTION || type==symbol_table_type::STRUCT){
+        total_size+=size;
+    }
+    else{
+        parent->increase_total_size(size);
+    }
+}
+
 void symbol_table::push(symbol* s){
     table.push_back(s);
-    if (s->type==symbol_type::LOCAL)
-        inc_locals_count();
+    if (s->type==symbol_type::LOCAL){
+        
+        increase_total_size(s->size);
+    }
+    
 }
 
 inline std::string symbol::get_nasm_label(){
@@ -90,4 +130,16 @@ void symbol_table::push_params(std::vector<token> &params){
 
     }
     
+}
+
+void symbol_table::push_struct(symbol_table* struct_table){
+    structs.push_back(struct_table);
+
+    for (int i=0;i<struct_table->table.size();i++){
+        symbol* field=struct_table->table.at(i);
+        
+        struct_fields.push_back(field);
+
+    }
+
 }

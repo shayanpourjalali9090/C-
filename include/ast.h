@@ -14,6 +14,7 @@ enum class ast_node_type{
     UNARY,
     IDENTIFIER,
     ARRAY_ACCESS,
+    PTR_ACCESS,
     FUNCTION_CALL,
     NUMBER,
     STRING,
@@ -82,7 +83,6 @@ class ast_node{
     std::string value,identifier,opcode,operand1,operand2;
     std::vector<token> params;
     symbol_table* table;
-    bool function_declaration;
 
     private:
 

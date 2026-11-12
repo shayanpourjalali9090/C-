@@ -20,14 +20,15 @@ const std::string operators[]={
 const std::string keywords[]={
     "let","while","if","else","func",
     "return","break","continue","true","false",
-    "NULL", "sizeof"
+    "NULL", "sizeof", "struct",
 };
 
 const std::string asm_keywords[]={
     "MOV","ADD","SUB","IDIV","IMUL","JMP","JG",
     "JGE","JL","JLE","JNE","JE","CALL","RET",
     "CMP", "SHR", "SHL", "INC","DEC","SYSCALL",
-    "CALL","PUSH","POP","MOVZX",
+    "CALL","PUSH","POP","MOVZX","RDTSC","AND","OR",
+    "XOR",
 };
 
 const std::string registers[]={
@@ -112,10 +113,12 @@ inline bool is_numeric(char c){
 
 void is_hex(std::string str){
     for (int i=2;i<str.size();i++){
-        if (str[i]<'0' || (!(str[i]>='a' && str[i]<='f') && !(str[i]>='A' && str[i]<='F'))){
-            emit_error(error::LEXICAL_ERROR, "Invalid hexadecimal literal '"+str+"'");
-            
-        }
+        bool b1=str[i]>='0' && str[i]<='9';
+        bool b2=str[i]>='a' && str[i]<='f';
+        bool b3=str[i]>='A' && str[i]<='F';
+        if (b2 || b3 || b1)continue;
+        
+        emit_error(error::LEXICAL_ERROR,"Invalid hex literal '"+str+"'");
 
     }
 
@@ -130,16 +133,29 @@ void is_binary(std::string str){
 
 }
 
-bool is_numeric(std::string &str){
-    if (str.size()>2 && str[0]=='0' && str[1]=='x'){
+void is_octal(std::string str){
+    for (int i=2;i<str.size();i++){
+        if (str[i]<'0' || str[i]>'7'){
+            emit_error(error::LEXICAL_ERROR,"Invalid octal literal '"+str+"'");
+        }
+    }
+
+}
+
+bool is_numeric(std::string str){
+    if (str.size()>2 && str[0]=='0' && (str[1]=='x' || str[1]=='X')){
         is_hex(str);
         return true;
 
     }
-    else if (str.size()>2 && str[0]=='0' && str[1]=='b'){
+    else if (str.size()>2 && str[0]=='0' && (str[1]=='b' || str[1]=='B')){
         is_binary(str);
         return true;
 
+    }
+    else if (str.size()>2 && str[0]=='0' && (str[1]=='o' || str[1]=='O')){
+        is_octal(str);
+        return true;
     }
     for (char c:str){
         if (!is_numeric(c)){
@@ -185,6 +201,10 @@ void emit_error(error err, std::string msg, int line_number){
         }
         case error::CODE_GENERATION_ERROR:{
             std::cout << "Code Generation Error: ";
+            break;
+        }
+        case error::PREPROCESSING_ERROR:{
+            std::cout << "Pre-processing Error: ";
             break;
         }
         default:break;
@@ -239,7 +259,7 @@ std::string sformat(std::string str, ...){
 }
 
 int get_asm_instruction_length(std::string &keyword){
-    if (keyword=="RET" || keyword=="SYSCALL")return 1;
+    if (keyword=="RET" || keyword=="SYSCALL" || keyword=="RDTSC")return 1;
     if (keyword=="CALL" || keyword=="INC" || keyword=="DEC" 
         || keyword=="IDIV" || keyword=="JMP" || keyword=="JG" 
         || keyword=="JGE" || keyword=="JL" || keyword=="JLE" 

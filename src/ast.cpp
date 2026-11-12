@@ -67,6 +67,7 @@ std::string node_type_to_string(ast_node_type type){
         "UNARY",
         "IDENTIFIER",
         "ARRAY_ACCESS",
+        "PTR_ACCESS",
         "FUNCTION_CALL",
         "NUMBER",
         "STRING",
