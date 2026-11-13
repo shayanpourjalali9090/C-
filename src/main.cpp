@@ -89,6 +89,10 @@ token_list lex(std::string &file){
                     i++;
                     
                     while (i<file.length() && file[i]!='"'){
+                        if (file[i]=='\n'){
+                            i++;
+                            continue;
+                        }
                         buf+=file[i++];
                     }
 
@@ -663,6 +667,15 @@ ast_node* parse_primary(token_list &list){
 ast_node* parse_member_access(token_list &list){
     ast_node* node=parse_primary(list);
 
+    if (node->type==ast_node_type::IDENTIFIER && list.match("@")){
+        list++;
+        token t=list++;
+        if (t.type!=token_type::IDENTIFIER){
+            emit_error(error::SYNTAX_ERROR,"Expected identifier after '@', to specify struct",t.line_number);
+        }
+        node->struct_ref=t.value;
+
+    }
     if (list.match(".") || list.match("->")){
         ast_node* node2=new ast_node(ast_node_type::MEMBER_ACCESS);
         int lineno=list.peek().line_number;
@@ -1522,7 +1535,9 @@ void build_symbol_table(ast_node* node, symbol_table* table){
     
 
 }
-
+#ifndef EXIT
+#define EXIT std::exit(0);
+#endif
 symbol* generate_member_access(asm_program &program, asm_function* function, symbol_table* table, ast_node* node){
     symbol* s=table->lookup(node->left->identifier);
 
@@ -1541,7 +1556,7 @@ symbol* generate_member_access(asm_program &program, asm_function* function, sym
     cur=cur->right;
 
     while (cur->type==ast_node_type::MEMBER_ACCESS){
-        symbol* field=table->lookup_field(cur->left->identifier);
+        symbol* field=table->lookup_field(cur->left->identifier,cur->left->struct_ref);
         if (field==nullptr){
             emit_error(error::CODE_GENERATION_ERROR,"Unknown struct field: '"+cur->left->identifier+"'");
         }
@@ -1556,7 +1571,7 @@ symbol* generate_member_access(asm_program &program, asm_function* function, sym
 
     }
 
-    symbol* field=table->lookup_field(cur->identifier);
+    symbol* field=table->lookup_field(cur->identifier,cur->struct_ref);
 
     if (field==nullptr){
         emit_error(error::CODE_GENERATION_ERROR, "Unknown struct field: '" + cur->identifier + "'");
@@ -1959,6 +1974,7 @@ void generate_expression(asm_program &program, asm_function* function, symbol_ta
             function->push(instruction("MOV","R8","8"));
 
         }
+        
 
     }
     else if (node->type==ast_node_type::SIZEOF){
@@ -2016,7 +2032,7 @@ void generate_expression(asm_program &program, asm_function* function, symbol_ta
             function->push(instruction("MOV","R8","8"));
 
             function->push(instruction("MOV","RAX","RBX"));
-
+            
         }
     else if (node->value=="/=" || node->value=="%="){
         generate_expression(program,function,table,node->left,false);
@@ -2180,7 +2196,12 @@ void generate_expression(asm_program &program, asm_function* function, symbol_ta
 
         std::string address=s->get_address();
 
-        function->push(instruction("LEA","RAX",sformat("[%s]",address.c_str())));
+        function->push(instruction("LEA","RAX","["+address+"]"));
+
+        if (s->type==symbol_type::GLOBAL && (s->is_array || s->parent_struct!=nullptr)){
+            function->push(instruction("MOV","RAX","[RAX]"));
+
+        }
 
         if (!get_address){
             function->push(instruction("MOV","RAX","[RAX]"));
@@ -2488,6 +2509,7 @@ void generate_asm(asm_program &program, asm_function* function, symbol_table* ta
 }
 
 void generate_statement(asm_program &program, asm_function* function, symbol_table* table, ast_node* node){
+    // printf("GENERATING STATEMENT: %s\n",node->value.c_str());
     if (node==nullptr)return;
 
     if (node->type==ast_node_type::DECLARATION){
@@ -2758,7 +2780,7 @@ int main(int argc, char** argv){
     
     }
     asm_program program;
-
+    
     generate_code(program,global_table,tree);
 
     std::string nasm_string=program.to_string();

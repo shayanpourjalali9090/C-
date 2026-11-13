@@ -67,14 +67,23 @@ symbol_table* symbol_table::lookup_struct(std::string identifier){
 
 }
 
-symbol* symbol_table::lookup_field(std::string field_name){
+symbol* symbol_table::lookup_field(std::string field_name, std::string struct_ref){
     for (int i=0;i<struct_fields.size();i++){
         symbol* field=struct_fields.at(i);
-        if (field->name==field_name)return field;
+        
+        if (!struct_ref.empty()){
+            if (field->name==field_name && field->memberof_struct->name==struct_ref)return field;
+
+        }
+        else{
+            if (field->name==field_name)return field;
+            
+        }
+        
 
     }
 
-    if (parent)return parent->lookup_field(field_name);
+    if (parent!=nullptr)return parent->lookup_field(field_name,struct_ref);
     
     return nullptr;
 
@@ -137,7 +146,7 @@ void symbol_table::push_struct(symbol_table* struct_table){
 
     for (int i=0;i<struct_table->table.size();i++){
         symbol* field=struct_table->table.at(i);
-        
+        field->memberof_struct=struct_table;
         struct_fields.push_back(field);
 
     }

@@ -32,6 +32,7 @@ class symbol{
     int element_size;
     int base_offset;
     class symbol_table* parent_struct;
+    class symbol_table* memberof_struct;
 
     bool is_array=false;
 
@@ -78,7 +79,7 @@ class symbol_table{
 
     symbol_table* lookup_struct(std::string name);
 
-    symbol* lookup_field(std::string field_name);
+    symbol* lookup_field(std::string field_name, std::string struct_ref);
 
     void push_params(std::vector<token> &params);
 
